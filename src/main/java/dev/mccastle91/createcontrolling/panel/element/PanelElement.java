@@ -125,6 +125,23 @@ public abstract class PanelElement {
         return type.height();
     }
 
+    /**
+     * The highest the part ever stands off the face, px, whatever state it is
+     * in: how far over it the console can be aimed at (a guard that lifts).
+     */
+    public float reach() {
+        return height();
+    }
+
+    /**
+     * What the click ray is tested against: boxes {x0, y0, z0, x1, y1, z1} in
+     * px from the part's corner, z off the face. Most parts are one box; a
+     * part with more reports which was hit as the click's zone (the index).
+     */
+    public float[][] pickBoxes() {
+        return new float[][] { { 0, 0, 0, width(), depth(), height() } };
+    }
+
     public static float snap(float value) {
         return Math.round(value / SNAP) * SNAP;
     }
@@ -194,6 +211,11 @@ public abstract class PanelElement {
      */
     public boolean click(float localX, float localY, boolean sneaking) {
         return false;
+    }
+
+    /** As above, for parts with more than one click zone (see {@link #pickBoxes}). */
+    public boolean click(int zone, float localX, float localY, boolean sneaking) {
+        return click(localX, localY, sneaking);
     }
 
     /** Scroll adjustment (sneak + mouse wheel). Returns true if state changed. */

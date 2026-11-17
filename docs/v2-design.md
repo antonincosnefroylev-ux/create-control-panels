@@ -39,7 +39,7 @@ Wrench: sneak-use cycles the angle presets; on a wall it runs 15/30/45° with th
 | latching_button | 3×3 | out, toggles 0/15 | click |
 | large_button | 5×5 | out, 15 for a pulse | click |
 | toggle_switch | 2×3 | out, latching | click |
-| covered_switch | 2×3 | out, 15 only when armed | click: closed → open → armed → closed |
+| covered_switch | 2×3 | out, 15 while the lever is on | closed: click lifts the guard; open: click the lever to toggle, click the lid (or sneak-click) to close. Closing switches off unless set to keep its state |
 | knob | 4×4 | out, analog | click sets value from hit angle; sneak-scroll ±1 |
 | slider_h / slider_v | 8×1.5 / 1.5×8 | out, analog | click sets value from hit position |
 | lamp / large_lamp | 2×2 / 4×4 | in, glow by strength | — |

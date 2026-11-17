@@ -3,6 +3,7 @@ package dev.mccastle91.createcontrolling.panel;
 import dev.mccastle91.createcontrolling.panel.element.BarMeterElement;
 import dev.mccastle91.createcontrolling.panel.element.ButtonElement;
 import dev.mccastle91.createcontrolling.panel.element.ColorableElement;
+import dev.mccastle91.createcontrolling.panel.element.CoveredSwitchElement;
 import dev.mccastle91.createcontrolling.panel.element.LabelElement;
 import dev.mccastle91.createcontrolling.panel.element.PanelElement;
 import dev.mccastle91.createcontrolling.panel.element.PanelElementType;
@@ -193,6 +194,8 @@ public final class PanelEditOps {
             colorable.setColor(DyeColor.byName(op.getString("Value"), colorable.color()));
         else if (element instanceof ButtonElement button && key.equals("pulse_ticks"))
             button.setPulseTicks(op.getInt("Value"));
+        else if (element instanceof CoveredSwitchElement guarded && key.equals("keeps_state"))
+            guarded.setKeepsState(op.getBoolean("Value"));
         else if (element instanceof ReadoutElement readout && key.equals("line"))
             readout.setLine(op.getInt("Row"), op.getInt("Value"));
         else if (element instanceof LabelElement label) {

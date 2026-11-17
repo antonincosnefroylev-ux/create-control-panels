@@ -9,16 +9,20 @@ import java.util.function.Predicate;
 
 /**
  * Finds which component a player is pointing at: the eye ray, moved into
- * face space, against each clickable component's 3D box (footprint × its
- * height off the face). The nearest hit wins, so you press the raised cap
- * you see rather than a cell of the face behind it.
+ * face space, against each clickable component's 3D boxes (for most, one:
+ * footprint × its height off the face). The nearest hit wins, so you press
+ * the raised cap you see rather than a cell of the face behind it.
  */
 public final class ConsolePicker {
 
     /** Thin parts still need something to hit. */
     public static final double MIN_HEIGHT = 0.25;
 
-    public record Pick(PanelElement element, float localX, float localY) {
+    /**
+     * @param zone which of the component's {@link PanelElement#pickBoxes} was hit
+     * @param box  that box, in face px: {x0, y0, z0, x1, y1, z1}
+     */
+    public record Pick(PanelElement element, float localX, float localY, int zone, float[] box) {
     }
 
     private ConsolePicker() {
@@ -40,16 +44,26 @@ public final class ConsolePicker {
         Vec3 d = face.toFaceDirection(direction);
 
         PanelElement best = null;
+        float[] bestBox = null;
+        int bestZone = 0;
         double bestT = Double.MAX_VALUE;
         for (PanelElement element : layout.elements()) {
             if (!pickable.test(element))
                 continue;
-            double t = intersect(o, d, element.x(), element.y(), 0,
-                    element.x() + element.width(), element.y() + element.depth(),
-                    Math.max(MIN_HEIGHT, element.height()));
-            if (t >= 0 && t < bestT) {
-                bestT = t;
-                best = element;
+            float[][] boxes = element.pickBoxes();
+            for (int zone = 0; zone < boxes.length; zone++) {
+                float[] local = boxes[zone];
+                float[] box = {
+                        element.x() + local[0], element.y() + local[1], local[2],
+                        element.x() + local[3], element.y() + local[4],
+                        (float) Math.max(local[2] + MIN_HEIGHT, local[5]) };
+                double t = intersect(o, d, box[0], box[1], box[2], box[3], box[4], box[5]);
+                if (t >= 0 && t < bestT) {
+                    bestT = t;
+                    best = element;
+                    bestBox = box;
+                    bestZone = zone;
+                }
             }
         }
         if (best == null)
@@ -57,7 +71,7 @@ public final class ConsolePicker {
         Vec3 hit = o.add(d.scale(bestT));
         float localX = (float) Math.max(0, Math.min(best.width(), hit.x - best.x()));
         float localY = (float) Math.max(0, Math.min(best.depth(), hit.y - best.y()));
-        return Optional.of(new Pick(best, localX, localY));
+        return Optional.of(new Pick(best, localX, localY, bestZone, bestBox));
     }
 
     /** Slab test: ray parameter of the first hit on the box, or -1. */

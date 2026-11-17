@@ -105,6 +105,7 @@ public class PanelDesignerScreen extends Screen {
     private final List<Button> selectionOnly = new ArrayList<>();
     private final List<Button> colorOnly = new ArrayList<>();
     private final List<Button> pulseOnly = new ArrayList<>();
+    private Button guardButton;
     private final List<Button> labelOnly = new ArrayList<>();
     private final List<Button> barOnly = new ArrayList<>();
     private final List<Button> readoutOnly = new ArrayList<>();
@@ -218,6 +219,10 @@ public class PanelDesignerScreen extends Screen {
                         Component.translatable("gui.create_controlling.color"),
                         b -> openColorPicker(ColorTarget.COMPONENT, b))
                 .bounds(sideX, y, 58, 14).build()));
+        guardButton = addRenderableWidget(Button.builder(Component.empty(), b -> toggleGuardKeepsState())
+                .bounds(sideX, y + 16, COLUMN - 2, 14)
+                .tooltip(Tooltip.create(Component.translatable("gui.create_controlling.guard.tooltip")))
+                .build());
         pulseOnly.add(addRenderableWidget(Button.builder(Component.literal("Pulse -"), b -> adjustPulse(-5))
                 .bounds(sideX, y + 16, 58, 14).build()));
         pulseOnly.add(addRenderableWidget(Button.builder(Component.literal("Pulse +"), b -> adjustPulse(5))
@@ -421,6 +426,11 @@ public class PanelDesignerScreen extends Screen {
         tag.putString("Key", key);
         valueWriter.accept(tag);
         send(tag);
+    }
+
+    private void toggleGuardKeepsState() {
+        if (selected() instanceof CoveredSwitchElement guarded)
+            sendOption("keeps_state", tag -> tag.putBoolean("Value", !guarded.keepsState()));
     }
 
     private void adjustPulse(int delta) {
@@ -947,6 +957,12 @@ public class PanelDesignerScreen extends Screen {
         selectionOnly.forEach(w -> w.visible = element != null);
         colorOnly.forEach(w -> w.visible = element instanceof ColorableElement);
         pulseOnly.forEach(w -> w.visible = element instanceof ButtonElement);
+        if (guardButton != null) {
+            guardButton.visible = element instanceof CoveredSwitchElement;
+            if (element instanceof CoveredSwitchElement guarded)
+                guardButton.setMessage(Component.translatable(guarded.keepsState()
+                        ? "gui.create_controlling.guard.keeps" : "gui.create_controlling.guard.switches_off"));
+        }
         labelOnly.forEach(w -> w.visible = isLabel);
         barOnly.forEach(w -> w.visible = element instanceof BarMeterElement);
         readoutOnly.forEach(w -> w.visible = element instanceof ReadoutElement);
@@ -991,7 +1007,9 @@ public class PanelDesignerScreen extends Screen {
         } else if (e instanceof SwitchElement toggle) {
             graphics.fill(cx - 1, toggle.isOn() ? y0 + 2 : cy, cx + 1, toggle.isOn() ? cy : y1 - 2, 0xFF202020);
         } else if (e instanceof CoveredSwitchElement covered) {
-            if (covered.state() == CoveredSwitchElement.State.CLOSED)
+            // the lever as on a toggle switch, inside a ring while the guard is down
+            graphics.fill(cx - 1, covered.isOn() ? y0 + 4 : cy, cx + 1, covered.isOn() ? cy : y1 - 4, 0xFF202020);
+            if (!covered.isGuardOpen())
                 frame(graphics, x0 + 2, y0 + 2, x1 - 2, y1 - 2, 0xFF202020);
         } else if (e instanceof LatchingButtonElement latching && latching.isOn()) {
             graphics.fill(cx - 2, cy - 2, cx + 2, cy + 2, 0xFFFFFFFF);

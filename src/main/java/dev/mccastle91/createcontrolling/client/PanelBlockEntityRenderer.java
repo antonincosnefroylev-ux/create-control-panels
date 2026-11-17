@@ -94,7 +94,7 @@ public class PanelBlockEntityRenderer<T extends PanelBlockEntity> implements Blo
             if (element instanceof LabelElement label)
                 label(p, font, label);
             else if (element instanceof CoveredSwitchElement covered)
-                coveredSwitch(p, w, d, covered.state(), color(covered));
+                coveredSwitch(p, w, d, covered.lidTop(), covered.isGuardOpen(), covered.isOn(), color(covered));
             else if (element instanceof SwitchElement toggle)
                 toggle(p, w, d, toggle.isOn(), color(toggle));
             else if (element instanceof LatchingButtonElement latching)
@@ -172,10 +172,10 @@ public class PanelBlockEntityRenderer<T extends PanelBlockEntity> implements Blo
      * between them carry the hinge: hidden inside the closed lid, holding up
      * the open one.
      */
-    private void coveredSwitch(ComponentPainter p, float w, float d, CoveredSwitchElement.State state, int color) {
+    private void coveredSwitch(ComponentPainter p, float w, float d, float top, boolean open, boolean on, int color) {
         toggleBase(p, w, d);
-        lever(p, w / 2, d / 2, 0.5f, state == CoveredSwitchElement.State.ARMED, LEVER_LENGTH, 0xFFDDDDDD);
-        float top = 2.4f, t = 0.2f, post = 0.25f, base = 0.25f;
+        lever(p, w / 2, d / 2, 0.5f, on, LEVER_LENGTH, 0xFFDDDDDD);
+        float t = CoveredSwitchElement.LID_THICKNESS, post = 0.25f, base = 0.25f;
         // posts just inside the lid's side walls, clear of the lever and its
         // pivot block; they stop under the lid's top so no faces coincide
         p.box(t, 0.05f, base, t + post, 0.45f, top - t, brass, 0xFFFFFFFF, light);
@@ -183,7 +183,7 @@ public class PanelBlockEntityRenderer<T extends PanelBlockEntity> implements Blo
         p.box(t + post, 0.05f, top - t - 0.25f, w - t - post, 0.25f, top - t, brass, 0xFFFFFFFF, light);
         p.push();
         p.translate(0, 0, top);
-        if (state != CoveredSwitchElement.State.CLOSED)
+        if (open)
             p.rotateX(90);
         // the walls stand on the base plate, not beside its edges
         p.box(0, 0, -t, w, d, 0, component, color, light);

@@ -61,7 +61,8 @@ class PanelLayoutSerializationTest {
 
         CoveredSwitchElement covered = PanelElements.COVERED_SWITCH.create();
         covered.setPos(12, 1);
-        covered.setState(CoveredSwitchElement.State.ARMED);
+        covered.setGuardOpen(true);
+        covered.setOn(true);
         layout.addElement(covered);
 
         LampElement lamp = PanelElements.LAMP.create();
@@ -118,7 +119,8 @@ class PanelLayoutSerializationTest {
         assertTrue(toggle.frequency().second().isEmpty());
 
         assertEquals(11, ((KnobElement) loaded.elements().get(2)).value());
-        assertEquals(CoveredSwitchElement.State.ARMED, ((CoveredSwitchElement) loaded.elements().get(3)).state());
+        CoveredSwitchElement guarded = (CoveredSwitchElement) loaded.elements().get(3);
+        assertTrue(guarded.isGuardOpen() && guarded.isOn(), "guard and lever state survive");
 
         LampElement lamp = (LampElement) loaded.elements().get(4);
         assertEquals(DyeColor.RED, lamp.color());
@@ -187,5 +189,86 @@ class PanelLayoutSerializationTest {
         FrequencyPair loaded = FrequencyPair.load(pair.save(registries), registries);
         assertTrue(loaded.first().is(Items.BRICK));
         assertTrue(loaded.second().isEmpty());
+    }
+
+    @Test
+    void guardedSwitchWorksGuardAndLeverSeparately() {
+        CoveredSwitchElement guarded = PanelElements.COVERED_SWITCH.create();
+        int lever = CoveredSwitchElement.ZONE_LEVER, lid = CoveredSwitchElement.ZONE_LID;
+
+        assertTrue(guarded.click(lever, 1, 1.5f, false), "first click lifts the guard");
+        assertTrue(guarded.isGuardOpen());
+        assertFalse(guarded.isOn(), "lifting the guard doesn't switch on");
+        assertEquals(0, guarded.transmittedStrength());
+
+        assertTrue(guarded.click(lever, 1, 1.5f, false));
+        assertTrue(guarded.isOn());
+        assertEquals(15, guarded.transmittedStrength());
+        assertTrue(guarded.click(lever, 1, 1.5f, false));
+        assertFalse(guarded.isOn(), "the lever switches off again with the guard still up");
+        assertTrue(guarded.isGuardOpen());
+
+        assertTrue(guarded.click(lid, 1, 0.2f, false), "a click on the raised lid closes it");
+        assertFalse(guarded.isGuardOpen());
+        assertFalse(guarded.isOn(), "closed without ever switching on");
+
+        // sneak-click works the guard from anywhere; closing switches off
+        assertTrue(guarded.click(lever, 1, 1.5f, true));
+        assertTrue(guarded.isGuardOpen());
+        assertTrue(guarded.click(lever, 1, 1.5f, false));
+        assertTrue(guarded.isOn());
+        assertTrue(guarded.click(lever, 1, 1.5f, true));
+        assertFalse(guarded.isGuardOpen());
+        assertFalse(guarded.isOn(), "closing the guard switches off");
+        assertTrue(guarded.takesSneakClicks(), "sneak-click goes to the guard, not the designer");
+    }
+
+    @Test
+    void guardedSwitchCanKeepItsStateUnderTheGuard() {
+        CoveredSwitchElement guarded = PanelElements.COVERED_SWITCH.create();
+        guarded.setKeepsState(true);
+        guarded.click(CoveredSwitchElement.ZONE_LEVER, 1, 1.5f, false);
+        guarded.click(CoveredSwitchElement.ZONE_LEVER, 1, 1.5f, false);
+        assertTrue(guarded.click(CoveredSwitchElement.ZONE_LID, 1, 0.2f, false));
+        assertFalse(guarded.isGuardOpen());
+        assertTrue(guarded.isOn(), "locked on under the guard");
+        assertEquals(15, guarded.transmittedStrength());
+
+        CompoundTag saved = guarded.save(registries);
+        CoveredSwitchElement loaded = PanelElements.COVERED_SWITCH.create();
+        loaded.load(saved, registries);
+        assertTrue(loaded.keepsState() && loaded.isOn() && !loaded.isGuardOpen(), "saved as it was");
+
+        guarded.setKeepsState(false);
+        assertFalse(guarded.isOn(), "no longer allowed to be on under a closed guard");
+    }
+
+    @Test
+    void guardedSwitchLoadsItsOldThreeStateSaves() {
+        CoveredSwitchElement template = PanelElements.COVERED_SWITCH.create();
+        String[] states = { "CLOSED", "OPEN", "ARMED" };
+        boolean[] open = { false, true, true };
+        boolean[] on = { false, false, true };
+        for (int i = 0; i < states.length; i++) {
+            CompoundTag old = template.save(registries);
+            old.remove(CoveredSwitchElement.TAG_GUARD_OPEN);
+            old.remove(CoveredSwitchElement.TAG_ON);
+            old.remove(CoveredSwitchElement.TAG_KEEPS_STATE);
+            old.putString("State", states[i]);
+            CoveredSwitchElement loaded = PanelElements.COVERED_SWITCH.create();
+            loaded.load(old, registries);
+            assertEquals(open[i], loaded.isGuardOpen(), states[i]);
+            assertEquals(on[i], loaded.isOn(), states[i]);
+        }
+    }
+
+    @Test
+    void guardedSwitchObeysAutomation() {
+        CoveredSwitchElement guarded = PanelElements.COVERED_SWITCH.create();
+        assertTrue(guarded.operate(15));
+        assertTrue(guarded.isGuardOpen() && guarded.isOn(), "switching on lifts the guard on the way");
+        assertFalse(guarded.operate(7), "already on");
+        assertTrue(guarded.operate(0));
+        assertFalse(guarded.isGuardOpen() || guarded.isOn(), "switching off closes it");
     }
 }

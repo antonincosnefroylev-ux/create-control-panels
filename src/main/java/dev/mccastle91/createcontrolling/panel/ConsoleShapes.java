@@ -36,7 +36,7 @@ public final class ConsoleShapes {
         for (AABB box : bodyBoxes(shape))
             result = Shapes.or(result, Shapes.create(orientation.apply(box)));
         for (PanelElement element : layout.elements()) {
-            if (element.height() <= 0)
+            if (element.reach() <= 0)
                 continue;
             result = Shapes.or(result, Shapes.create(orientation.apply(elementBox(face, element))));
         }
@@ -60,13 +60,13 @@ public final class ConsoleShapes {
         return boxes;
     }
 
-    /** Model-space bounds of a component: its footprint corners, at the face and lifted by its height. */
+    /** Model-space bounds of a component: its footprint corners, at the face and lifted as high as it ever reaches. */
     private static AABB elementBox(PanelFaceGeometry face, PanelElement element) {
         double x0 = element.x();
         double y0 = element.y();
         double x1 = x0 + element.width();
         double y1 = y0 + element.depth();
-        double h = element.height();
+        double h = element.reach();
         Vec3 min = null;
         Vec3 max = null;
         for (double px : new double[] { x0, x1 })

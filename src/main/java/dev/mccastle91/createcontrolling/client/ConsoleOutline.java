@@ -8,7 +8,6 @@ import dev.mccastle91.createcontrolling.panel.ConsoleShape;
 import dev.mccastle91.createcontrolling.panel.PanelBlock;
 import dev.mccastle91.createcontrolling.panel.PanelBlockEntity;
 import dev.mccastle91.createcontrolling.panel.PanelFaceGeometry;
-import dev.mccastle91.createcontrolling.panel.element.PanelElement;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
@@ -22,8 +21,9 @@ import java.util.Optional;
 /**
  * The block highlight for consoles. The selection voxel shape is a stack of
  * boxes (so rays reach raised parts), which outlines as a stepped mess; this
- * draws instead the component under the crosshair, tilted with the face, or —
- * when none is aimed at — the console's true wedge.
+ * draws instead the component under the crosshair, tilted with the face (for
+ * a part with several click zones, the one aimed at: a guarded switch's lever
+ * or its raised lid), or — when none is aimed at — the console's true wedge.
  */
 public final class ConsoleOutline {
 
@@ -52,20 +52,18 @@ public final class ConsoleOutline {
         poseStack.translate(origin.x - camera.x, origin.y - camera.y, origin.z - camera.z);
         Lines lines = new Lines(buffers.getBuffer(RenderType.lines()), poseStack.last());
         if (pick.isPresent())
-            element(lines, PanelFaceGeometry.of(state, panel.shape()), pick.get().element());
+            box(lines, PanelFaceGeometry.of(state, panel.shape()), pick.get().box());
         else
             body(lines, ConsoleOrientation.of(state), panel.shape());
         poseStack.popPose();
         return true;
     }
 
-    /** The component's box, standing on the face. */
-    private static void element(Lines lines, PanelFaceGeometry face, PanelElement element) {
-        double x0 = element.x(), y0 = element.y();
-        double x1 = x0 + element.width(), y1 = y0 + element.depth();
-        double h = Math.max(ConsolePicker.MIN_HEIGHT, element.height());
-        Vec3[] lo = { face.point(x0, y0, 0), face.point(x1, y0, 0), face.point(x1, y1, 0), face.point(x0, y1, 0) };
-        Vec3[] hi = { face.point(x0, y0, h), face.point(x1, y0, h), face.point(x1, y1, h), face.point(x0, y1, h) };
+    /** The box the click ray hit ({x0, y0, z0, x1, y1, z1} in face px), standing on the face. */
+    private static void box(Lines lines, PanelFaceGeometry face, float[] box) {
+        double x0 = box[0], y0 = box[1], z0 = box[2], x1 = box[3], y1 = box[4], z1 = box[5];
+        Vec3[] lo = { face.point(x0, y0, z0), face.point(x1, y0, z0), face.point(x1, y1, z0), face.point(x0, y1, z0) };
+        Vec3[] hi = { face.point(x0, y0, z1), face.point(x1, y0, z1), face.point(x1, y1, z1), face.point(x0, y1, z1) };
         for (int i = 0; i < 4; i++) {
             lines.line(lo[i], lo[(i + 1) % 4]);
             lines.line(hi[i], hi[(i + 1) % 4]);

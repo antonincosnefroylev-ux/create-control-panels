@@ -238,8 +238,13 @@ public class PanelBlockEntity extends BlockEntity {
      * element's footprint. Returns true if the element reacted.
      */
     public boolean clickElement(UUID elementId, float localX, float localY, boolean sneaking) {
+        return clickElement(elementId, 0, localX, localY, sneaking);
+    }
+
+    /** As above, on one of the element's click zones (see {@link PanelElement#pickBoxes}). */
+    public boolean clickElement(UUID elementId, int zone, float localX, float localY, boolean sneaking) {
         PanelElement element = layout.elementById(elementId).orElse(null);
-        if (element == null || !element.takesClicks() || !element.click(localX, localY, sneaking))
+        if (element == null || !element.takesClicks() || !element.click(zone, localX, localY, sneaking))
             return false;
         onElementStateChanged(element);
         return true;

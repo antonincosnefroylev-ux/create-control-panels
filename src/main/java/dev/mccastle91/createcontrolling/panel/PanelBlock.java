@@ -300,7 +300,7 @@ public class PanelBlock extends FaceAttachedHorizontalDirectionalBlock implement
         }
 
         // Edit mode: sneak-use opens the designer (client screen), unless the
-        // crosshair is on a component that takes sneak-clicks (knobs, sliders)
+        // crosshair is on a component that takes sneak-clicks (knobs, sliders, guarded switches)
         if (sneaking && !pick.map(hit -> hit.element().takesSneakClicks()).orElse(false)) {
             if (level.isClientSide && CCClientHooks.OPEN_DESIGNER != null)
                 CCClientHooks.OPEN_DESIGNER.accept(pos);
@@ -312,7 +312,7 @@ public class PanelBlock extends FaceAttachedHorizontalDirectionalBlock implement
         // Play mode: the component under the crosshair acts, server-side
         if (!level.isClientSide) {
             ConsolePicker.Pick hit = pick.get();
-            panel.clickElement(hit.element().id(), hit.localX(), hit.localY(), sneaking);
+            panel.clickElement(hit.element().id(), hit.zone(), hit.localX(), hit.localY(), sneaking);
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
     }

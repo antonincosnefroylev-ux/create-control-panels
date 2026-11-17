@@ -1,6 +1,7 @@
 package dev.mccastle91.createcontrolling.panel;
 
 import dev.mccastle91.createcontrolling.panel.element.ButtonElement;
+import dev.mccastle91.createcontrolling.panel.element.CoveredSwitchElement;
 import dev.mccastle91.createcontrolling.panel.element.PanelElements;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.Direction;
@@ -129,6 +130,52 @@ class ConsoleGeometryTest {
                     assertTrue(ConsolePicker.pick(state, actual, layout, bareEye, bare.subtract(bareEye)).isEmpty(),
                             "bare plate: " + where);
                 }
+    }
+
+    @Test
+    void anOpenGuardSplitsIntoLeverAndLid() {
+        PanelLayout layout = new PanelLayout();
+        CoveredSwitchElement guarded = PanelElements.COVERED_SWITCH.create(); // 2 x 3 px, lid top 2.4 px up
+        guarded.setPos(6, 6);
+        layout.addElement(guarded);
+
+        for (ConsoleShape shape : SHAPES)
+            for (AttachFace face : AttachFace.values())
+                for (Direction facing : Direction.Plane.HORIZONTAL) {
+                    BlockState state = placement(face, facing);
+                    ConsoleShape actual = shape.forFace(face);
+                    PanelFaceGeometry geometry = PanelFaceGeometry.of(state, actual);
+                    String where = face + "/" + facing + " at " + actual;
+                    Vec3 lever = geometry.point(7, 7.5, 1.5);
+                    Vec3 lid = geometry.point(7, 6.1, 3.9);
+
+                    guarded.setGuardOpen(false);
+                    assertEquals(CoveredSwitchElement.ZONE_LEVER, zoneAimedAt(state, actual, layout, geometry, lever),
+                            "closed, the whole part is one target: " + where);
+                    assertEquals(-1, zoneAimedAt(state, actual, layout, geometry, geometry.point(7, 5.5, 3.9)),
+                            "nothing stands behind a closed guard: " + where);
+
+                    guarded.setGuardOpen(true);
+                    assertEquals(CoveredSwitchElement.ZONE_LEVER, zoneAimedAt(state, actual, layout, geometry, lever),
+                            "the lever under the open lid: " + where);
+                    assertTrue(zoneAimedAt(state, actual, layout, geometry, lid) >= CoveredSwitchElement.ZONE_LID,
+                            "the raised lid: " + where);
+                }
+
+        // the block can be aimed at as high as the open lid stands, open or not
+        guarded.setGuardOpen(false);
+        BlockState floor = placement(AttachFace.FLOOR, Direction.NORTH);
+        double top = ConsoleShapes.selection(floor, ConsoleShape.FLAT, layout).max(Direction.Axis.Y);
+        double plate = ConsoleShapes.selection(floor, ConsoleShape.FLAT, new PanelLayout()).max(Direction.Axis.Y);
+        assertEquals(guarded.reach() / 16.0, top - plate, 1e-6, "selection reaches the open lid's top");
+    }
+
+    /** The click zone hit when looking at {@code target} as a player does (from above, a little to the near side), or -1. */
+    private static int zoneAimedAt(BlockState state, ConsoleShape shape, PanelLayout layout,
+                                   PanelFaceGeometry geometry, Vec3 target) {
+        Vec3 eye = target.add(geometry.normal().scale(1.5)).add(geometry.v().scale(0.4));
+        return ConsolePicker.pick(state, shape, layout, eye, target.subtract(eye))
+                .map(ConsolePicker.Pick::zone).orElse(-1);
     }
 
     /** Every kind of slope, including the reversed ones walls may take. */
