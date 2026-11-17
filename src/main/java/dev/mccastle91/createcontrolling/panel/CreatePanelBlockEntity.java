@@ -33,6 +33,12 @@ public class CreatePanelBlockEntity extends PanelBlockEntity implements IHaveGog
     public static final ModelProperty<ConsoleCasing> CASING_PROPERTY = new ModelProperty<>();
 
     private static final int MAX_GOGGLE_LINES = 8;
+    /**
+     * The goggles overlay is switched off for now: it clutters a wall of
+     * consoles. It is due a redesign (with a per-console off switch), which
+     * is why the code below stays.
+     */
+    private static final boolean GOGGLES_OVERLAY = false;
 
     public CreatePanelBlockEntity(BlockEntityType<? extends PanelBlockEntity> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -60,6 +66,8 @@ public class CreatePanelBlockEntity extends PanelBlockEntity implements IHaveGog
 
     @Override
     public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
+        if (!GOGGLES_OVERLAY)
+            return false;
         tooltip.add(Component.translatable("gui.create_controlling.goggles.header"));
         List<PanelElement> elements = getLayout().elements();
         if (elements.isEmpty()) {

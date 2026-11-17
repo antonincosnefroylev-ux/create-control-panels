@@ -3,25 +3,17 @@ package dev.mccastle91.createcontrolling.client;
 import dev.mccastle91.createcontrolling.client.model.ConsoleBakedModel;
 import dev.mccastle91.createcontrolling.compat.ponder.CCPonderPlugin;
 import dev.mccastle91.createcontrolling.network.CCNetwork;
-import dev.mccastle91.createcontrolling.panel.ConsolePicker;
-import dev.mccastle91.createcontrolling.panel.PanelBlock;
-import dev.mccastle91.createcontrolling.panel.PanelBlockEntity;
 import dev.mccastle91.createcontrolling.panel.PanelEditOps;
-import dev.mccastle91.createcontrolling.panel.element.AnalogElement;
 import dev.mccastle91.createcontrolling.registry.CCContent;
 import net.createmod.ponder.foundation.PonderIndex;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.block.BlockModelShaper;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.client.resources.model.ModelResourceLocation;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
 //? if neoforge {
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
@@ -53,9 +45,11 @@ public final class CreateControllingClient {
         modEventBus.addListener(CreateControllingClient::swapConsoleModels);
         //? if neoforge {
         NeoForge.EVENT_BUS.addListener(CreateControllingClient::onMouseScroll);
+        NeoForge.EVENT_BUS.addListener(AnalogDrag::onUseKey);
         NeoForge.EVENT_BUS.addListener(CreateControllingClient::onHighlight);
         //?} else {
         /*MinecraftForge.EVENT_BUS.addListener(CreateControllingClient::onMouseScroll);
+        MinecraftForge.EVENT_BUS.addListener(AnalogDrag::onUseKey);
         MinecraftForge.EVENT_BUS.addListener(CreateControllingClient::onHighlight);
         *///?}
         PonderIndex.addPlugin(new CCPonderPlugin());
@@ -104,19 +98,10 @@ public final class CreateControllingClient {
     /** Sneak + scroll while aiming at a knob or slider nudges it, analog-lever style. */
     private static void onMouseScroll(InputEvent.MouseScrollingEvent event) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null || mc.player == null || mc.screen != null || !mc.player.isShiftKeyDown())
+        if (mc.player == null || mc.screen != null || !mc.player.isShiftKeyDown())
             return;
-        if (!(mc.hitResult instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK)
-            return;
-        BlockPos pos = hit.getBlockPos();
-        BlockState state = mc.level.getBlockState(pos);
-        if (!(state.getBlock() instanceof PanelBlock) || !(mc.level.getBlockEntity(pos) instanceof PanelBlockEntity panel))
-            return;
-        Vec3 origin = Vec3.atLowerCornerOf(pos);
-        Vec3 eye = mc.player.getEyePosition().subtract(origin);
-        Vec3 direction = hit.getLocation().subtract(origin).subtract(eye);
-        var pick = ConsolePicker.pick(state, panel.shape(), panel.getLayout(), eye, direction);
-        if (pick.isEmpty() || !(pick.get().element() instanceof AnalogElement analog))
+        AnalogDrag.Aim aim = AnalogDrag.aimedAnalog(mc);
+        if (aim == null)
             return;
         //? if neoforge {
         int delta = (int) Math.signum(event.getScrollDeltaY());
@@ -127,9 +112,9 @@ public final class CreateControllingClient {
             return;
         CompoundTag op = new CompoundTag();
         op.putString(PanelEditOps.KEY_OP, PanelEditOps.OP_ADJUST);
-        op.putUUID("Id", analog.id());
+        op.putUUID("Id", aim.element().id());
         op.putInt("Delta", delta);
-        CCNetwork.sendEditToServer(pos, op);
+        CCNetwork.sendEditToServer(aim.pos(), op);
         event.setCanceled(true);
     }
 }

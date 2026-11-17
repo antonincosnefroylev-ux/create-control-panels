@@ -38,6 +38,15 @@ public final class McCompat {
         *///?}
     }
 
+    /** As {@link #saveStack}, but an empty stack saves too (as an empty tag) instead of failing on 1.21. */
+    public static Tag saveStackOptional(ItemStack stack, @Nullable HolderLookup.Provider registries) {
+        //? if >=1.21 {
+        return stack.saveOptional(registries);
+        //?} else {
+        /*return stack.save(new CompoundTag());
+        *///?}
+    }
+
     public static ItemStack loadStack(CompoundTag tag, @Nullable HolderLookup.Provider registries) {
         //? if >=1.21 {
         return ItemStack.parseOptional(registries, tag);

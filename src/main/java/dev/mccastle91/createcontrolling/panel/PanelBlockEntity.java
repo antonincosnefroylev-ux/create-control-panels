@@ -2,6 +2,7 @@ package dev.mccastle91.createcontrolling.panel;
 
 import dev.mccastle91.createcontrolling.link.CCLink;
 import dev.mccastle91.createcontrolling.link.LinkPort;
+import dev.mccastle91.createcontrolling.panel.element.AnalogElement;
 import dev.mccastle91.createcontrolling.panel.element.PanelElement;
 import dev.mccastle91.createcontrolling.util.McCompat;
 import net.minecraft.core.BlockPos;
@@ -241,6 +242,14 @@ public class PanelBlockEntity extends BlockEntity {
         if (element == null || !element.takesClicks() || !element.click(localX, localY, sneaking))
             return false;
         onElementStateChanged(element);
+        return true;
+    }
+
+    /** A hand setting a knob or slider straight to a value. Returns true if it moved. */
+    public boolean setAnalogValue(UUID elementId, int value) {
+        if (!(layout.elementById(elementId).orElse(null) instanceof AnalogElement analog) || !analog.setValue(value))
+            return false;
+        onElementStateChanged(analog);
         return true;
     }
 

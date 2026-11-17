@@ -238,6 +238,132 @@ public class PanelLinkGameTests {
         helper.succeed();
     }
 
+    /**
+     * Sneak-wrenching is Create's own pick-up: the console leaves the world
+     * and lands in the player's inventory with its design, like a broken one.
+     */
+    @GameTest(template = EMPTY)
+    public void sneakWrenchPicksConsoleUpWithItsDesign(GameTestHelper helper) {
+        PanelBlockEntity panel = placePanelWith(helper, PanelElements.KNOB.create());
+        panel.setShape(ConsoleShape.of(30, 2));
+        panel.markLayoutChanged();
+        BlockPos abs = helper.absolutePos(PANEL_POS);
+        //? if >=1.21 {
+        var player = helper.makeMockPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        //?} else {
+        /*var player = helper.makeMockPlayer();
+        *///?}
+        player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, com.simibubi.create.AllItems.WRENCH.asStack());
+        var hit = new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(abs), Direction.UP, abs, false);
+        var context = new net.minecraft.world.item.context.UseOnContext(player,
+                net.minecraft.world.InteractionHand.MAIN_HAND, hit);
+        BlockState state = helper.getBlockState(PANEL_POS);
+        if (!(state.getBlock() instanceof com.simibubi.create.content.equipment.wrench.IWrenchable wrenchable))
+            throw new GameTestAssertException("Console is not wrenchable: " + state);
+
+        // a plain wrench click only changes the slope
+        wrenchable.onWrenched(state, context);
+        if (!(helper.getBlockEntity(PANEL_POS) instanceof PanelBlockEntity still) || still.shape().angle() != 45)
+            throw new GameTestAssertException("Wrench click should step 30° to 45° and leave the console in place");
+
+        // what Create hands a survival player on a sneak-wrench: the block's own drops
+        ItemStack picked = ItemStack.EMPTY;
+        for (ItemStack drop : net.minecraft.world.level.block.Block.getDrops(helper.getBlockState(PANEL_POS),
+                helper.getLevel(), abs, helper.getBlockEntity(PANEL_POS), player, player.getMainHandItem()))
+            if (drop.is(CCContent.CONTROL_PANEL.get().asItem()))
+                picked = drop;
+        if (picked.isEmpty())
+            throw new GameTestAssertException("A picked-up console should drop as a console item");
+
+        wrenchable.onSneakWrenched(helper.getBlockState(PANEL_POS), context);
+        if (helper.getBlockState(PANEL_POS).getBlock() instanceof PanelBlock)
+            throw new GameTestAssertException("Sneak-wrench left the console in the world");
+        //? if >=1.21 {
+        // (1.20.1's mock player is always creative, and Create gives creative players nothing)
+        if (!player.getInventory().hasAnyMatching(stack -> stack.is(CCContent.CONTROL_PANEL.get().asItem())))
+            throw new GameTestAssertException("Sneak-wrench did not put the console in the inventory");
+        //?}
+
+        // placed again, the item brings the design back
+        helper.setBlock(PANEL_POS, CCContent.CONTROL_PANEL.getDefaultState()
+                .setValue(FaceAttachedHorizontalDirectionalBlock.FACE, AttachFace.FLOOR));
+        net.minecraft.world.item.BlockItem.updateCustomBlockEntityTag(helper.getLevel(), player, abs, picked);
+        if (!(helper.getBlockEntity(PANEL_POS) instanceof PanelBlockEntity restored)
+                || restored.getLayout().elementCount() != 1
+                || !(restored.getLayout().elements().get(0) instanceof KnobElement))
+            throw new GameTestAssertException("Picked-up console lost its design");
+        helper.succeed();
+    }
+
+    /**
+     * Create's clipboard carries frequencies between real Redstone Links and
+     * console components, both ways, in Create's own format.
+     */
+    @GameTest(template = EMPTY)
+    public void clipboardCarriesFrequenciesToAndFromCreateLinks(GameTestHelper helper) {
+        KnobElement knob = PanelElements.KNOB.create();
+        knob.setFrequency(freq(Items.PRISMARINE_SHARD, Items.NAUTILUS_SHELL));
+        LampElement lamp = PanelElements.LAMP.create();
+        lamp.setPos(8, 8);
+        PanelBlockEntity panel = placePanelWith(helper, knob);
+        panel.getLayout().addElement(lamp);
+        panel.markLayoutChanged();
+        placeCreateLink(helper);
+        var registries = helper.getLevel().registryAccess();
+
+        helper.startSequence()
+                // LinkBehaviour attaches on the BE's first tick; retry until it exists
+                .thenWaitUntil(() -> setCreateLinkFrequency(helper, freq(Items.HONEYCOMB, Items.ECHO_SHARD)))
+                .thenExecute(() -> {
+                    LinkBehaviour link = BlockEntityBehaviour.get(helper.getLevel(), helper.absolutePos(LINK_POS),
+                            LinkBehaviour.TYPE);
+
+                    // a real link's frequency, copied by Create's own code, pastes onto the lamp
+                    ItemStack fromLink = AllBlocks.CLIPBOARD.asStack();
+                    CompoundTag copied = new CompoundTag();
+                    //? if >=1.21 {
+                    link.writeToClipboard(registries, copied, Direction.UP);
+                    //?} else {
+                    /*link.writeToClipboard(copied, Direction.UP);
+                    *///?}
+                    CompoundTag values = new CompoundTag();
+                    values.put(link.getClipboardKey(), copied);
+                    //? if >=1.21 {
+                    fromLink.set(com.simibubi.create.AllDataComponents.CLIPBOARD_CONTENT,
+                            com.simibubi.create.content.equipment.clipboard.ClipboardContent.EMPTY.setCopiedValues(values));
+                    //?} else {
+                    /*fromLink.getOrCreateTag().put("CopiedValues", values);
+                    *///?}
+                    if (!dev.mccastle91.createcontrolling.compat.create.ClipboardFrequencies.paste(fromLink, lamp, registries))
+                        throw new GameTestAssertException("Lamp did not take the link's frequency");
+                    if (!lamp.frequency().first().is(Items.HONEYCOMB) || !lamp.frequency().second().is(Items.ECHO_SHARD))
+                        throw new GameTestAssertException("Lamp got the wrong frequency: "
+                                + lamp.frequency().first() + " / " + lamp.frequency().second());
+
+                    // the knob's frequency, copied by us, pastes onto the real link through Create's own code
+                    ItemStack fromKnob = AllBlocks.CLIPBOARD.asStack();
+                    dev.mccastle91.createcontrolling.compat.create.ClipboardFrequencies.copy(fromKnob, knob, registries);
+                    CompoundTag ours = dev.mccastle91.createcontrolling.compat.create.ClipboardFrequencies
+                            .copiedValues(fromKnob);
+                    if (ours == null || !ours.contains(link.getClipboardKey()))
+                        throw new GameTestAssertException("Our copy is not under Create's link key: " + ours);
+                    //? if >=1.21 {
+                    boolean pasted = link.readFromClipboard(registries, ours.getCompound(link.getClipboardKey()),
+                            null, Direction.UP, false);
+                    //?} else {
+                    /*boolean pasted = link.readFromClipboard(ours.getCompound(link.getClipboardKey()),
+                            null, Direction.UP, false);
+                    *///?}
+                    if (!pasted)
+                        throw new GameTestAssertException("Create's link refused the frequency we copied");
+                    var key = link.getNetworkKey();
+                    if (!key.getFirst().getStack().is(Items.PRISMARINE_SHARD)
+                            || !key.getSecond().getStack().is(Items.NAUTILUS_SHELL))
+                        throw new GameTestAssertException("Link got the wrong frequency from our copy");
+                })
+                .thenSucceed();
+    }
+
     // --- helpers -----------------------------------------------------------
 
     /** Real Display Links writing through the target Create finds for a console. */

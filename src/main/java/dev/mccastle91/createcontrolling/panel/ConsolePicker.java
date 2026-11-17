@@ -5,6 +5,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /**
  * Finds which component a player is pointing at: the eye ray, moved into
@@ -28,6 +29,12 @@ public final class ConsolePicker {
      * @param direction ray direction (any length), block-local
      */
     public static Optional<Pick> pick(BlockState state, ConsoleShape shape, PanelLayout layout, Vec3 eye, Vec3 direction) {
+        return pick(state, shape, layout, eye, direction, PanelElement::takesClicks);
+    }
+
+    /** As above, among the components {@code pickable} accepts (lamps and meters don't take clicks). */
+    public static Optional<Pick> pick(BlockState state, ConsoleShape shape, PanelLayout layout, Vec3 eye, Vec3 direction,
+                                      Predicate<PanelElement> pickable) {
         PanelFaceGeometry face = PanelFaceGeometry.of(state, shape);
         Vec3 o = face.toFace(eye);
         Vec3 d = face.toFaceDirection(direction);
@@ -35,7 +42,7 @@ public final class ConsolePicker {
         PanelElement best = null;
         double bestT = Double.MAX_VALUE;
         for (PanelElement element : layout.elements()) {
-            if (!element.takesClicks())
+            if (!pickable.test(element))
                 continue;
             double t = intersect(o, d, element.x(), element.y(), 0,
                     element.x() + element.width(), element.y() + element.depth(),

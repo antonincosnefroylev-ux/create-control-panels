@@ -33,12 +33,17 @@ public final class PanelEditOps {
     public static final String OP_SET_OPTION = "set_option";
     /** Play mode: sneak + scroll nudges a knob or slider by a signed delta. */
     public static final String OP_ADJUST = "adjust";
+    /** Play mode: a held drag sets a knob or slider straight to a value. */
+    public static final String OP_SET_VALUE = "set_value";
     public static final String OP_SET_SHAPE = "set_shape";
 
     private PanelEditOps() {
     }
 
     public static boolean apply(PanelBlockEntity panel, CompoundTag op, HolderLookup.Provider registries, CostPayer payer) {
+        // a knob turning is no layout change: it syncs like a click does
+        if (OP_SET_VALUE.equals(op.getString(KEY_OP)))
+            return op.hasUUID("Id") && panel.setAnalogValue(op.getUUID("Id"), op.getInt("Value"));
         PanelLayout layout = panel.getLayout();
         boolean changed = switch (op.getString(KEY_OP)) {
             case OP_ADD -> add(layout, op, payer);
@@ -109,25 +114,32 @@ public final class PanelEditOps {
         PanelElement element = elementFor(layout, op);
         String key = op.getString("Key");
         if (element instanceof BarMeterElement bar && key.equals("length"))
-            return resizeBar(layout, bar, op.getFloat("Value"));
+            return reshapeBar(layout, bar, op.getFloat("Value"), bar.isVertical());
+        if (element instanceof BarMeterElement bar && key.equals("vertical"))
+            return reshapeBar(layout, bar, bar.length(), op.getBoolean("Value"));
         if (element instanceof ReadoutElement readout && key.equals("size"))
             return resizeReadout(layout, readout, op.getInt("Value"));
         return withElement(layout, op, target -> applyOption(target, op));
     }
 
     /**
-     * Lengthens or shortens a bar meter from its left end, sliding it left
-     * if it would run off the face; refused if it would overlap a neighbour.
+     * Lengthens, shortens or turns a bar meter, keeping its top-left corner
+     * and sliding it back onto the face if it would run off; refused if it
+     * would overlap a neighbour.
      */
-    private static boolean resizeBar(PanelLayout layout, BarMeterElement bar, float requested) {
+    private static boolean reshapeBar(PanelLayout layout, BarMeterElement bar, float requested, boolean vertical) {
         float length = BarMeterElement.clampLength(requested);
-        if (length == bar.width())
+        if (length == bar.length() && vertical == bar.isVertical())
             return false;
-        float x = Math.min(bar.x(), PanelElement.AREA_MAX - length);
-        if (!layout.isAreaFree(x, bar.y(), length, bar.depth(), bar.id(), false))
+        float width = vertical ? bar.thickness() : length;
+        float depth = vertical ? length : bar.thickness();
+        float x = Math.min(bar.x(), PanelElement.AREA_MAX - width);
+        float y = Math.min(bar.y(), PanelElement.AREA_MAX - depth);
+        if (!layout.isAreaFree(x, y, width, depth, bar.id(), false))
             return false;
+        bar.setVertical(vertical);
         bar.setLength(length);
-        bar.setPos(x, bar.y());
+        bar.setPos(x, y);
         return true;
     }
 
@@ -183,15 +195,20 @@ public final class PanelEditOps {
             button.setPulseTicks(op.getInt("Value"));
         else if (element instanceof ReadoutElement readout && key.equals("line"))
             readout.setLine(op.getInt("Row"), op.getInt("Value"));
-        else if (element instanceof LabelElement label)
+        else if (element instanceof LabelElement label) {
             switch (key) {
                 case "text" -> label.setText(op.getString("Value"));
                 case "text_color" -> label.setColor(op.getInt("Value"));
                 case "scale" -> label.setScale(op.getInt("Value"));
                 case "alignment" -> label.setAlignment(LabelElement.Alignment.byName(op.getString("Value")));
                 case "width" -> label.setLabelWidth(op.getFloat("Value"));
+                case "wrap" -> label.setWrap(op.getBoolean("Value"));
                 default -> {
                 }
             }
+            // the designer measured the text as it will be after this change
+            if (op.contains("Lines"))
+                label.setLines(op.getInt("Lines"));
+        }
     }
 }

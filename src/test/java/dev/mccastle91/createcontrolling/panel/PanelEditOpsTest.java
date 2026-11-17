@@ -381,6 +381,105 @@ class PanelEditOpsTest {
         assertEquals(8, loaded.elementById(bar.id()).orElseThrow().width(), "length is saved");
     }
 
+    @Test
+    void barMetersTurnUpright() {
+        PanelBlockEntity panel = newPanel();
+        assertTrue(apply(panel, add("bar_meter", 1, 10)));
+        BarMeterElement bar = (BarMeterElement) panel.getLayout().elements().get(0);
+        assertTrue(apply(panel, length(bar, 8)));
+
+        assertTrue(apply(panel, option(bar, "vertical", tag -> tag.putBoolean("Value", true))));
+        assertTrue(bar.isVertical());
+        assertEquals(2, bar.width(), "the short side lies across");
+        assertEquals(8, bar.depth(), "the length runs up the face");
+        assertEquals(PanelElement.AREA_MAX - 8, bar.y(), "slid back onto the face");
+        assertFalse(apply(panel, option(bar, "vertical", tag -> tag.putBoolean("Value", true))), "already upright");
+
+        // length now grows along the face's depth
+        assertTrue(apply(panel, length(bar, 12)));
+        assertEquals(12, bar.depth());
+        assertEquals(2, bar.width());
+
+        // a neighbour where it would lie refuses the turn back
+        assertTrue(apply(panel, add("button", 6, 3)));
+        assertFalse(apply(panel, option(bar, "vertical", tag -> tag.putBoolean("Value", false))),
+                "would run into the button");
+        assertTrue(bar.isVertical());
+
+        PanelLayout loaded = PanelLayout.load(panel.getLayout().save(registries), registries);
+        BarMeterElement saved = (BarMeterElement) loaded.elementById(bar.id()).orElseThrow();
+        assertTrue(saved.isVertical(), "orientation is saved");
+        assertEquals(12, saved.depth());
+    }
+
+    @Test
+    void labelsWrapOntoUpToThreeLines() {
+        PanelBlockEntity panel = newPanel();
+        assertTrue(apply(panel, add("label", 1, 1)));
+        LabelElement label = (LabelElement) panel.getLayout().elements().get(0);
+        assertEquals(1, label.depth(), "one line of scale-1 text");
+
+        // not wrapping: a line count sent with a change is ignored
+        assertTrue(apply(panel, option(label, "text", tag -> {
+            tag.putString("Value", "Boiler feed pump");
+            tag.putInt("Lines", 3);
+        })));
+        assertEquals(1, label.lines());
+
+        assertTrue(apply(panel, option(label, "wrap", tag -> {
+            tag.putBoolean("Value", true);
+            tag.putInt("Lines", 2);
+        })));
+        assertEquals(2, label.lines());
+        assertEquals(2, label.depth(), "the footprint grows with the lines");
+
+        assertTrue(apply(panel, option(label, "scale", tag -> {
+            tag.putInt("Value", 2);
+            tag.putInt("Lines", 9);
+        })));
+        assertEquals(LabelElement.MAX_LINES, label.lines(), "never more than three lines");
+        assertEquals(6, label.depth());
+
+        PanelLayout loaded = PanelLayout.load(panel.getLayout().save(registries), registries);
+        LabelElement saved = (LabelElement) loaded.elementById(label.id()).orElseThrow();
+        assertTrue(saved.wraps());
+        assertEquals(3, saved.lines(), "wrapping and line count are saved");
+
+        assertTrue(apply(panel, option(label, "wrap", tag -> tag.putBoolean("Value", false))));
+        assertEquals(1, label.lines(), "back to one line when wrapping is off");
+        assertEquals(2, label.depth());
+    }
+
+    @Test
+    void heldDragSetsAnalogValueDirectly() {
+        PanelBlockEntity panel = newPanel();
+        assertTrue(apply(panel, add("knob", 1, 1)));
+        assertTrue(apply(panel, add("button", 8, 8)));
+        KnobElement knob = (KnobElement) panel.getLayout().elements().get(0);
+        PanelElement button = panel.getLayout().elements().get(1);
+
+        CompoundTag set = op(PanelEditOps.OP_SET_VALUE, knob.id());
+        set.putInt("Value", 9);
+        assertTrue(apply(panel, set));
+        assertEquals(9, knob.value());
+        assertFalse(apply(panel, set), "already there");
+
+        set.putInt("Value", 99);
+        assertTrue(apply(panel, set));
+        assertEquals(15, knob.value(), "clamped to the top of the range");
+
+        CompoundTag onButton = op(PanelEditOps.OP_SET_VALUE, button.id());
+        onButton.putInt("Value", 5);
+        assertFalse(apply(panel, onButton), "only knobs and sliders take a value");
+    }
+
+    private static CompoundTag option(PanelElement element, String key, java.util.function.Consumer<CompoundTag> value) {
+        CompoundTag tag = op(PanelEditOps.OP_SET_OPTION, element.id());
+        tag.putString("Key", key);
+        value.accept(tag);
+        return tag;
+    }
+
     private static CompoundTag length(PanelElement element, float value) {
         CompoundTag tag = op(PanelEditOps.OP_SET_OPTION, element.id());
         tag.putString("Key", "length");

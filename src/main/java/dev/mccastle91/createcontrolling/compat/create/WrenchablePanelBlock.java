@@ -7,10 +7,11 @@ import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * Create-wrench integration: sneak-wrenching a console steps its angle
- * through the presets (flat, 15°, 30°, 45°; a wall console runs through them
- * with its top edge raised, then with its bottom edge raised). Anything else
- * falls through to Create's default sneak-wrench handling.
+ * Create-wrench integration: wrenching a console steps its angle through the
+ * presets (flat, 15°, 30°, 45°; a wall console runs through them with its top
+ * edge raised, then with its bottom edge raised). Sneak-wrenching is left to
+ * Create: it picks the console up into the player's inventory, design and all
+ * (the drop carries it, see {@link PanelBlock#getDrops}).
  */
 public class WrenchablePanelBlock extends PanelBlock implements IWrenchable {
 
@@ -26,10 +27,11 @@ public class WrenchablePanelBlock extends PanelBlock implements IWrenchable {
     //?}
 
     @Override
-    public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
+    public InteractionResult onWrenched(BlockState state, UseOnContext context) {
         InteractionResult cycled = cycleShapePreset(state, context.getLevel(), context.getClickedPos());
-        return cycled == InteractionResult.PASS
-                ? IWrenchable.super.onSneakWrenched(state, context)
-                : cycled;
+        if (cycled == InteractionResult.PASS)
+            return IWrenchable.super.onWrenched(state, context);
+        IWrenchable.playRotateSound(context.getLevel(), context.getClickedPos());
+        return cycled;
     }
 }

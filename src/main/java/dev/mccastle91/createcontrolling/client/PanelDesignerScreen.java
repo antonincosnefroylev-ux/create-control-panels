@@ -111,6 +111,10 @@ public class PanelDesignerScreen extends Screen {
     private final List<Button> boardOnly = new ArrayList<>();
     private final List<Button> stripOnly = new ArrayList<>();
     private EditBox labelTextBox;
+    private Button wrapButton;
+    private Button barTurnButton;
+    /** Set while the text box is filled from a label, which may hold more than now fits. */
+    private boolean loadingLabelText;
     private AngleSlider angleSlider;
     /** Wall consoles only: which edge stands out from the wall. */
     private Button slopeButton;
@@ -222,6 +226,9 @@ public class PanelDesignerScreen extends Screen {
                 .bounds(sideX, y + 16, 58, 14).build()));
         barOnly.add(addRenderableWidget(Button.builder(Component.literal("Length +"), b -> adjustBarLength(1))
                 .bounds(sideX + 60, y + 16, 58, 14).build()));
+        barTurnButton = addRenderableWidget(Button.builder(Component.empty(), b -> turnBar())
+                .bounds(sideX + 60, y, 58, 14).build());
+        barOnly.add(barTurnButton);
 
         // Readouts: which line each row shows, between its - and + buttons, then the size
         lineRowY = y;
@@ -238,9 +245,12 @@ public class PanelDesignerScreen extends Screen {
 
         labelTextBox = new EditBox(font, sideX, y, COLUMN - 2, 14, Component.empty());
         labelTextBox.setMaxLength(LabelElement.MAX_TEXT_LENGTH);
+        // typing stops when the label is full; shortening is always allowed
+        labelTextBox.setFilter(text -> loadingLabelText || text.length() < labelTextBox.getValue().length()
+                || labelTextFits(text));
         addRenderableWidget(labelTextBox);
         labelOnly.add(addRenderableWidget(Button.builder(Component.translatable("gui.create_controlling.apply"),
-                        b -> sendOption("text", tag -> tag.putString("Value", labelTextBox.getValue())))
+                        b -> sendLabelText())
                 .bounds(sideX, y + 16, 58, 14).build()));
         labelOnly.add(addRenderableWidget(Button.builder(
                         Component.translatable("gui.create_controlling.align"), b -> cycleAlignment())
@@ -257,6 +267,11 @@ public class PanelDesignerScreen extends Screen {
                         Component.translatable("gui.create_controlling.text_color"),
                         b -> openColorPicker(ColorTarget.TEXT, b))
                 .bounds(sideX, y + 64, COLUMN - 2, 14).build()));
+        wrapButton = addRenderableWidget(Button.builder(Component.empty(), b -> toggleWrap())
+                .bounds(sideX, y + 80, COLUMN - 2, 14)
+                .tooltip(Tooltip.create(Component.translatable("gui.create_controlling.wrap.tooltip")))
+                .build());
+        labelOnly.add(wrapButton);
     }
 
     private void lineButtons(List<Button> group, int row, int y) {
@@ -377,7 +392,7 @@ public class PanelDesignerScreen extends Screen {
         if (choosing)
             return new Rect2i(chooserX(), chooserY(), CHOOSER_WIDTH, CHOOSER_HEIGHT);
         // the face and its shape controls, or the option buttons beside it if lower
-        int height = Math.max(CANVAS + 6 + 30, optionsY + 11 + 78 - canvasY);
+        int height = Math.max(CANVAS + 6 + 30, optionsY + 11 + 94 - canvasY);
         return new Rect2i(canvasX - GAP - COLUMN, canvasY, COLUMN + GAP + CANVAS + GAP + COLUMN, height);
     }
 
@@ -415,7 +430,12 @@ public class PanelDesignerScreen extends Screen {
 
     private void adjustBarLength(float delta) {
         if (selected() instanceof BarMeterElement bar)
-            sendOption("length", tag -> tag.putFloat("Value", bar.width() + delta));
+            sendOption("length", tag -> tag.putFloat("Value", bar.length() + delta));
+    }
+
+    private void turnBar() {
+        if (selected() instanceof BarMeterElement bar)
+            sendOption("vertical", tag -> tag.putBoolean("Value", !bar.isVertical()));
     }
 
     private void adjustLine(int row, int delta) {
@@ -488,14 +508,72 @@ public class PanelDesignerScreen extends Screen {
         colorTarget = null;
     }
 
+    // Labels: only the client can measure text, so every change that moves
+    // the line breaks carries the line count the label will then need
+
+    private static float labelLineHeight(int scale) {
+        return Mth.clamp(scale, 1, LabelElement.MAX_SCALE) * LabelElement.DEPTH_PER_SCALE;
+    }
+
+    private static float labelTextWidth(float width) {
+        float clamped = Mth.clamp(PanelElement.snap(width), 1f, PanelElement.AREA_MAX - PanelElement.AREA_MIN);
+        return clamped - 2 * LabelElement.TEXT_MARGIN;
+    }
+
+    /** Lines the label needs for this text and shape, capped at what it may show. */
+    private int labelLines(String text, float width, int scale, boolean wrap) {
+        if (!wrap)
+            return 1;
+        return Math.min(LabelElement.MAX_LINES,
+                LabelText.linesNeeded(font, text, labelTextWidth(width), labelLineHeight(scale)));
+    }
+
+    /** Whether the selected label can show all of this text. */
+    private boolean labelTextFits(String text) {
+        if (!(selected() instanceof LabelElement label))
+            return true;
+        return LabelText.fits(font, text, label.textWidth(), label.lineHeight(), label.maxLines());
+    }
+
+    private void sendLabelText() {
+        if (!(selected() instanceof LabelElement label))
+            return;
+        String text = labelTextBox.getValue();
+        sendOption("text", tag -> {
+            tag.putString("Value", text);
+            tag.putInt("Lines", labelLines(text, label.width(), label.scale(), label.wraps()));
+        });
+    }
+
     private void adjustScale(int delta) {
         if (selected() instanceof LabelElement label)
-            sendOption("scale", tag -> tag.putInt("Value", label.scale() + delta));
+            sendOption("scale", tag -> {
+                tag.putInt("Value", label.scale() + delta);
+                tag.putInt("Lines", labelLines(label.text(), label.width(), label.scale() + delta, label.wraps()));
+            });
     }
 
     private void adjustLabelWidth(float delta) {
         if (selected() instanceof LabelElement label)
-            sendOption("width", tag -> tag.putFloat("Value", label.width() + delta));
+            sendOption("width", tag -> {
+                tag.putFloat("Value", label.width() + delta);
+                tag.putInt("Lines", labelLines(label.text(), label.width() + delta, label.scale(), label.wraps()));
+            });
+    }
+
+    private void toggleWrap() {
+        if (selected() instanceof LabelElement label)
+            sendOption("wrap", tag -> {
+                tag.putBoolean("Value", !label.wraps());
+                tag.putInt("Lines", labelLines(label.text(), label.width(), label.scale(), !label.wraps()));
+            });
+    }
+
+    /** Fills the text box from a label, even one holding more than now fits. */
+    private void loadLabelText(LabelElement label) {
+        loadingLabelText = true;
+        labelTextBox.setValue(label.text());
+        loadingLabelText = false;
     }
 
     private void cycleAlignment() {
@@ -598,7 +676,7 @@ public class PanelDesignerScreen extends Screen {
                 previewY = hit.y();
                 dragMoved = false;
                 if (hit instanceof LabelElement label && labelTextBox != null)
-                    labelTextBox.setValue(label.text());
+                    loadLabelText(label);
             }
             return true;
         }
@@ -876,6 +954,12 @@ public class PanelDesignerScreen extends Screen {
         stripOnly.forEach(w -> w.visible = element instanceof NixieStripElement);
         if (labelTextBox != null)
             labelTextBox.visible = isLabel;
+        if (wrapButton != null && element instanceof LabelElement label)
+            wrapButton.setMessage(Component.translatable(label.wraps()
+                    ? "gui.create_controlling.wrap.on" : "gui.create_controlling.wrap.off"));
+        if (barTurnButton != null && element instanceof BarMeterElement bar)
+            barTurnButton.setMessage(Component.translatable(bar.isVertical()
+                    ? "gui.create_controlling.bar.vertical" : "gui.create_controlling.bar.horizontal"));
         boolean shapeable = panel != null;
         shapeOnly.forEach(w -> w.visible = shapeable);
         if (angleSlider != null) {
@@ -922,21 +1006,25 @@ public class PanelDesignerScreen extends Screen {
     }
 
     private void drawLabel(GuiGraphics graphics, LabelElement label, int x0, int y0, int x1, int y1) {
-        if (label.text().isEmpty())
-            return;
-        // Mirrors the face renderer: one font line per footprint depth
-        float k = (y1 - y0) / (float) font.lineHeight;
-        float textWidth = font.width(label.text()) * k;
-        float textX = switch (label.alignment()) {
-            case LEFT -> x0 + 1;
-            case RIGHT -> x1 - textWidth - 1;
-            case CENTER -> x0 + (x1 - x0 - textWidth) / 2f;
-        };
-        graphics.pose().pushPose();
-        graphics.pose().translate(textX, y0 + (y1 - y0) * 0.12f, 0);
-        graphics.pose().scale(k, k, 1f);
-        graphics.drawString(font, label.text(), 0, 0, 0xFF000000 | label.color(), false);
-        graphics.pose().popPose();
+        // Mirrors the face renderer: one font line per text line of the footprint
+        float rowHeight = (y1 - y0) / (float) label.lines();
+        float k = rowHeight / font.lineHeight;
+        float margin = LabelElement.TEXT_MARGIN * SCALE;
+        int row = 0;
+        for (String line : LabelText.lines(font, label)) {
+            float textWidth = font.width(line) * k;
+            float textX = switch (label.alignment()) {
+                case LEFT -> x0 + margin;
+                case RIGHT -> x1 - textWidth - margin;
+                case CENTER -> x0 + (x1 - x0 - textWidth) / 2f;
+            };
+            graphics.pose().pushPose();
+            graphics.pose().translate(textX, y0 + (row + 0.12f) * rowHeight, 0);
+            graphics.pose().scale(k, k, 1f);
+            graphics.drawString(font, line, 0, 0, 0xFF000000 | label.color(), false);
+            graphics.pose().popPose();
+            row++;
+        }
     }
 
     private void renderFrequencySlots(GuiGraphics graphics, PanelElement element, int mouseX, int mouseY) {

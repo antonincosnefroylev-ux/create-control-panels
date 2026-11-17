@@ -2,7 +2,9 @@ package dev.mccastle91.createcontrolling;
 
 import dev.mccastle91.createcontrolling.client.CreateControllingClient;
 import dev.mccastle91.createcontrolling.compat.computercraft.ComputerCraftCompat;
+import dev.mccastle91.createcontrolling.compat.create.ClipboardFrequencies;
 import dev.mccastle91.createcontrolling.compat.create.CreateLinkPlatform;
+import dev.mccastle91.createcontrolling.config.CCClientConfigSpec;
 import dev.mccastle91.createcontrolling.config.CCConfigSpec;
 import dev.mccastle91.createcontrolling.link.CCLink;
 import dev.mccastle91.createcontrolling.network.CCNetwork;
@@ -36,11 +38,13 @@ public class CreateControllingMod {
     //? if neoforge {
     public CreateControllingMod(IEventBus modEventBus, ModContainer container) {
         container.registerConfig(ModConfig.Type.SERVER, CCConfigSpec.SPEC);
+        container.registerConfig(ModConfig.Type.CLIENT, CCClientConfigSpec.SPEC);
         init(modEventBus);
     }
     //?} else {
     /*public CreateControllingMod() {
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, CCConfigSpec.SPEC);
+        ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, CCClientConfigSpec.SPEC);
         init(FMLJavaModLoadingContext.get().getModEventBus());
     }
     *///?}
@@ -50,6 +54,7 @@ public class CreateControllingMod {
         CCContent.register();
         CCLink.PLATFORM = new CreateLinkPlatform();
         CCNetwork.register(modEventBus);
+        ClipboardFrequencies.init();
         modEventBus.addListener(this::commonSetup);
         modEventBus.addListener(this::onConfigLoading);
         modEventBus.addListener(this::onConfigReloading);
@@ -62,11 +67,19 @@ public class CreateControllingMod {
     }
 
     private void onConfigLoading(ModConfigEvent.Loading event) {
-        CCConfigSpec.apply();
+        applyConfig(event);
     }
 
     private void onConfigReloading(ModConfigEvent.Reloading event) {
-        CCConfigSpec.apply();
+        applyConfig(event);
+    }
+
+    /** Each file loads on its own schedule: only read the one this event is about. */
+    private static void applyConfig(ModConfigEvent event) {
+        if (event.getConfig().getSpec() == CCConfigSpec.SPEC)
+            CCConfigSpec.apply();
+        else if (event.getConfig().getSpec() == CCClientConfigSpec.SPEC)
+            CCClientConfigSpec.apply();
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {

@@ -167,10 +167,10 @@ public class CCPonderScenes {
         scene.idle(50);
 
         scene.overlay().showControls(onFace(console, 8, 8, 4), Pointing.DOWN, 75)
-                .rightClick().whileSneaking().withItem(AllItems.WRENCH.asStack());
+                .rightClick().withItem(AllItems.WRENCH.asStack());
         scene.idle(7);
         scene.overlay().showText(70)
-                .text("Sneak-click with a Wrench to change the slope")
+                .text("Click with a Wrench to change the slope")
                 .pointAt(onFace(console, 8, 1, 0))
                 .placeNearTarget()
                 .attachKeyFrame();
@@ -312,7 +312,7 @@ public class CCPonderScenes {
         }
         scene.idle(15);
         scene.overlay().showText(70)
-                .text("Click to step up, Sneak-click to step back down")
+                .text("Click to step up, Sneak-click to step down, or hold and drag")
                 .pointAt(knob.top(console))
                 .placeNearTarget();
         scene.idle(15);

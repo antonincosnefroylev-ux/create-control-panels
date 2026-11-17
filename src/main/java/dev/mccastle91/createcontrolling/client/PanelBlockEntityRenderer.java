@@ -110,7 +110,7 @@ public class PanelBlockEntityRenderer<T extends PanelBlockEntity> implements Blo
             else if (element instanceof NeedleMeterElement meter)
                 needleMeter(p, w, d, meter.displayStrength());
             else if (element instanceof BarMeterElement meter)
-                barMeter(p, w, d, meter.displayStrength(), color(meter));
+                barMeter(p, w, d, meter.isVertical(), meter.displayStrength(), color(meter));
             else if (element instanceof NixieElement nixie)
                 nixie(p, font, element, nixie.digits());
             else if (element instanceof NixieStripElement strip)
@@ -258,11 +258,18 @@ public class PanelBlockEntityRenderer<T extends PanelBlockEntity> implements Blo
         p.box(px - 0.4f, py - 0.4f, 0.5f, px + 0.4f, py + 0.4f, 0.85f, brass, 0xFFFFFFFF, light);
     }
 
-    private void barMeter(ComponentPainter p, float w, float d, int strength, int color) {
+    /** Fills left to right, or from the near edge up when vertical (like a vertical slider's 0). */
+    private void barMeter(ComponentPainter p, float w, float d, boolean vertical, int strength, int color) {
         p.box(0, 0, 0, w, d, 0.5f, iron, 0xFFFFFFFF, light);
         p.plate(0.5f, 0.5f, w - 0.5f, d - 0.5f, 0.5f + LIFT, component, DARK, light);
-        if (strength > 0)
-            p.plate(0.5f, 0.5f, 0.5f + (w - 1) * strength / 15f, d - 0.5f, 0.5f + 2 * LIFT, component, color,
+        if (strength <= 0)
+            return;
+        float z = 0.5f + 2 * LIFT;
+        if (vertical)
+            p.plate(0.5f, d - 0.5f - (d - 1) * strength / 15f, w - 0.5f, d - 0.5f, z, component, color,
+                    ComponentPainter.FULL_BRIGHT);
+        else
+            p.plate(0.5f, 0.5f, 0.5f + (w - 1) * strength / 15f, d - 0.5f, z, component, color,
                     ComponentPainter.FULL_BRIGHT);
     }
 
@@ -341,18 +348,21 @@ public class PanelBlockEntityRenderer<T extends PanelBlockEntity> implements Blo
         }
     }
 
+    /** One font line per text line of the footprint; nothing is drawn past the label's width. */
     private void label(ComponentPainter p, Font font, LabelElement label) {
-        String text = label.text();
-        if (text.isEmpty())
-            return;
-        float lineHeight = label.depth();
-        float textWidth = font.width(text) * lineHeight / font.lineHeight;
-        float x = switch (label.alignment()) {
-            case LEFT -> label.x() + 0.1f;
-            case RIGHT -> label.x() + label.width() - textWidth - 0.1f;
-            case CENTER -> label.x() + (label.width() - textWidth) / 2f;
-        };
-        // a font line includes descender space: nudge glyphs to sit centred
-        p.faceText(font, text, x, label.y() + lineHeight * 0.12f, LIFT, lineHeight, 0xFF000000 | label.color(), light);
+        float lineHeight = label.lineHeight();
+        int row = 0;
+        for (String line : LabelText.lines(font, label)) {
+            float textWidth = font.width(line) * lineHeight / font.lineHeight;
+            float x = switch (label.alignment()) {
+                case LEFT -> label.x() + LabelElement.TEXT_MARGIN;
+                case RIGHT -> label.x() + label.width() - textWidth - LabelElement.TEXT_MARGIN;
+                case CENTER -> label.x() + (label.width() - textWidth) / 2f;
+            };
+            // a font line includes descender space: nudge glyphs to sit centred
+            p.faceText(font, line, x, label.y() + (row + 0.12f) * lineHeight, LIFT, lineHeight,
+                    0xFF000000 | label.color(), light);
+            row++;
+        }
     }
 }

@@ -185,7 +185,7 @@ public class PanelBlock extends FaceAttachedHorizontalDirectionalBlock implement
     // --- Wrench and casing --------------------------------------------------
 
     /**
-     * Sneak-wrench: steps the console through the angle presets; a wall
+     * Wrench: steps the console through the angle presets; a wall
      * console runs through them with its top edge raised, then its bottom.
      */
     public InteractionResult cycleShapePreset(BlockState state, Level level, BlockPos pos) {
