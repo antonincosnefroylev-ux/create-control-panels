@@ -7,6 +7,7 @@ import dev.mccastle91.createcontrolling.panel.ConsoleOrientation;
 import dev.mccastle91.createcontrolling.panel.ConsoleShape;
 import dev.mccastle91.createcontrolling.panel.PanelBlock;
 import dev.mccastle91.createcontrolling.panel.PanelFaceGeometry;
+import net.minecraft.client.renderer.FaceInfo;
 import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.Direction;
@@ -235,7 +236,64 @@ public final class ConsoleMesh {
         if (winding.dot(normal) < 0) {
             swap(pos, u, v, 1, 3);
         }
+        // start at the corner vanilla starts that face at (see vanillaStart)
+        int start = vanillaStart(pos, Direction.getNearest(normal.x, normal.y, normal.z));
+        if (start != 0) {
+            Vec3[] p0 = pos.clone();
+            float[] u0 = u.clone(), v0 = v.clone();
+            for (int i = 0; i < 4; i++) {
+                pos[i] = p0[(i + start) % 4];
+                u[i] = u0[(i + start) % 4];
+                v[i] = v0[(i + start) % 4];
+            }
+        }
         target.add(pack(pos, u, v, normal, sprite));
+    }
+
+    /**
+     * Which of a quad's corners (given counter-clockwise from outside) should
+     * come first so they run in the order vanilla bakes that face in.
+     *
+     * Smooth lighting doesn't look at where a quad's corners are: for a quad
+     * that doesn't cover its whole block face it shades the first corner as
+     * the face's first corner, the second as its second, and so on, working
+     * only from the quad's bounds. A console's corners start wherever its
+     * rotation leaves them, so on most facings each corner took the shading
+     * meant for its neighbour — a quarter turn out. On the 1 px strips that
+     * replace the frame between joined consoles, that put the shadow of a
+     * block standing behind the console along the whole length of the strip:
+     * dark lines at the seams. Starting at vanilla's corner fixes the shading
+     * of every quad, strips and wide ones alike.
+     */
+    static int vanillaStart(Vec3[] pos, Direction side) {
+        // bounds indexed like Direction's 3D data value: down, up, north, south, west, east
+        double[] bounds = { Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE,
+                Double.MAX_VALUE, -Double.MAX_VALUE };
+        for (Vec3 p : pos) {
+            bounds[0] = Math.min(bounds[0], p.y);
+            bounds[1] = Math.max(bounds[1], p.y);
+            bounds[2] = Math.min(bounds[2], p.z);
+            bounds[3] = Math.max(bounds[3], p.z);
+            bounds[4] = Math.min(bounds[4], p.x);
+            bounds[5] = Math.max(bounds[5], p.x);
+        }
+        FaceInfo face = FaceInfo.fromFacing(side);
+        int best = 0;
+        double bestCost = Double.MAX_VALUE;
+        for (int start = 0; start < 4; start++) {
+            double cost = 0;
+            for (int i = 0; i < 4; i++) {
+                FaceInfo.VertexInfo corner = face.getVertexInfo(i);
+                Vec3 p = pos[(i + start) % 4];
+                double dx = p.x - bounds[corner.xFace], dy = p.y - bounds[corner.yFace], dz = p.z - bounds[corner.zFace];
+                cost += dx * dx + dy * dy + dz * dz;
+            }
+            if (cost < bestCost - 1e-9) {
+                bestCost = cost;
+                best = start;
+            }
+        }
+        return best;
     }
 
     private static void swap(Vec3[] pos, float[] u, float[] v, int i, int j) {
