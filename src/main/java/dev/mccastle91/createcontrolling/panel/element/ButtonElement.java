@@ -39,6 +39,8 @@ public class ButtonElement extends PanelElement implements ColorableElement {
     public boolean click(float localX, float localY, boolean sneaking) {
         boolean wasOff = remainingPulse == 0;
         remainingPulse = pulseTicks;
+        if (wasOff)
+            sound(PartSound.button(true, isLarge()));
         return wasOff;
     }
 
@@ -49,6 +51,8 @@ public class ButtonElement extends PanelElement implements ColorableElement {
             return click(0, 0, false);
         boolean wasOn = remainingPulse > 0;
         remainingPulse = 0;
+        if (wasOn)
+            sound(PartSound.button(false, isLarge()));
         return wasOn;
     }
 
@@ -57,6 +61,8 @@ public class ButtonElement extends PanelElement implements ColorableElement {
         if (remainingPulse <= 0)
             return false;
         remainingPulse--;
+        if (remainingPulse == 0)
+            sound(PartSound.button(false, isLarge()));
         return remainingPulse == 0;
     }
 
@@ -68,6 +74,11 @@ public class ButtonElement extends PanelElement implements ColorableElement {
     @Override
     public void applyDisplayStrength(int strength) {
         remainingPulse = strength > 0 ? 1 : 0;
+    }
+
+    /** The large button: the same part on a bigger footprint. */
+    private boolean isLarge() {
+        return width() > 4;
     }
 
     public boolean isPressed() {

@@ -31,6 +31,7 @@ public class LatchingButtonElement extends PanelElement implements ColorableElem
     @Override
     public boolean click(float localX, float localY, boolean sneaking) {
         on = !on;
+        sound(PartSound.button(on, false));
         return true;
     }
 
@@ -38,6 +39,8 @@ public class LatchingButtonElement extends PanelElement implements ColorableElem
     public boolean operate(int strength) {
         boolean changed = on != strength > 0;
         on = strength > 0;
+        if (changed)
+            sound(PartSound.button(on, false));
         return changed;
     }
 

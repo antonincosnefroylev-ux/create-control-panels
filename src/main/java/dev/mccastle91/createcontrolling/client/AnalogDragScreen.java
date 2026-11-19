@@ -5,6 +5,7 @@ import dev.mccastle91.createcontrolling.network.CCNetwork;
 import dev.mccastle91.createcontrolling.panel.PanelBlockEntity;
 import dev.mccastle91.createcontrolling.panel.PanelEditOps;
 import dev.mccastle91.createcontrolling.panel.element.AnalogElement;
+import dev.mccastle91.createcontrolling.panel.element.PartSound;
 import dev.mccastle91.createcontrolling.panel.element.SliderElement;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -154,9 +155,10 @@ public class AnalogDragScreen extends Screen {
         op.putUUID("Id", elementId);
         op.putInt("Value", value);
         CCNetwork.sendEditToServer(pos, op);
-        // a soft click per step, rising a little with the value
+        // a soft click per step, rising a little with the value; heard here at once,
+        // while the console plays the same click to everyone else nearby
         minecraft.getSoundManager().play(
-                SimpleSoundInstance.forUI(SoundEvents.LEVER_CLICK, 1.1f + value * 0.03f, 0.3f));
+                SimpleSoundInstance.forUI(SoundEvents.LEVER_CLICK, PartSound.detentPitch(value), PartSound.detentVolume()));
     }
 
     //? if >=1.21 {

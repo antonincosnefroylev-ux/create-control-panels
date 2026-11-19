@@ -7,6 +7,7 @@ import dev.mccastle91.createcontrolling.panel.element.LabelElement;
 import dev.mccastle91.createcontrolling.panel.element.LampElement;
 import dev.mccastle91.createcontrolling.panel.element.PanelElement;
 import dev.mccastle91.createcontrolling.panel.element.PanelElements;
+import dev.mccastle91.createcontrolling.panel.element.PartSound;
 import dev.mccastle91.createcontrolling.panel.element.SliderElement;
 import dev.mccastle91.createcontrolling.panel.element.SwitchElement;
 import net.minecraft.SharedConstants;
@@ -15,6 +16,7 @@ import net.minecraft.data.registries.VanillaRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -270,5 +272,59 @@ class PanelLayoutSerializationTest {
         assertFalse(guarded.operate(7), "already on");
         assertTrue(guarded.operate(0));
         assertFalse(guarded.isGuardOpen() || guarded.isOn(), "switching off closes it");
+    }
+
+    @Test
+    void partsSoundWhenWorkedAndOnlyThen() {
+        ButtonElement button = PanelElements.BUTTON.create();
+        button.setPulseTicks(2);
+        assertEquals(null, button.takeSound(), "silent until worked");
+        assertTrue(button.click(0, 0, false));
+        PartSound down = button.takeSound();
+        assertEquals(SoundEvents.STONE_BUTTON_CLICK_ON, down.event(), "going down");
+        assertEquals(null, button.takeSound(), "each sound plays once");
+        assertFalse(button.click(0, 0, false), "already down");
+        assertEquals(null, button.takeSound(), "pressing a held button makes no new sound");
+        assertFalse(button.tick());
+        assertTrue(button.tick());
+        assertEquals(SoundEvents.STONE_BUTTON_CLICK_OFF, button.takeSound().event(), "coming back up");
+
+        ButtonElement large = PanelElements.LARGE_BUTTON.create();
+        large.click(0, 0, false);
+        assertTrue(large.takeSound().pitch() < down.pitch(), "the large button sits lower");
+
+        SwitchElement toggle = PanelElements.TOGGLE_SWITCH.create();
+        toggle.click(0, 0, false);
+        PartSound on = toggle.takeSound();
+        toggle.click(0, 0, false);
+        PartSound off = toggle.takeSound();
+        assertEquals(SoundEvents.LEVER_CLICK, on.event());
+        assertTrue(on.pitch() > off.pitch(), "on clicks higher than off, like a lever");
+        assertFalse(toggle.operate(0), "already off");
+        assertEquals(null, toggle.takeSound(), "no change, no sound");
+
+        CoveredSwitchElement guarded = PanelElements.COVERED_SWITCH.create();
+        guarded.click(CoveredSwitchElement.ZONE_LEVER, 1, 1.5f, false);
+        assertEquals(SoundEvents.IRON_TRAPDOOR_OPEN, guarded.takeSound().event(), "the guard lifting");
+        guarded.click(CoveredSwitchElement.ZONE_LEVER, 1, 1.5f, false);
+        assertEquals(SoundEvents.LEVER_CLICK, guarded.takeSound().event(), "the lever under it");
+        guarded.click(CoveredSwitchElement.ZONE_LID, 1, 0.2f, false);
+        assertEquals(SoundEvents.IRON_TRAPDOOR_CLOSE, guarded.takeSound().event(), "the guard closing");
+
+        KnobElement knob = PanelElements.KNOB.create();
+        knob.click(0, 0, false);
+        PartSound low = knob.takeSound();
+        knob.setValue(9);
+        assertEquals(null, knob.takeSound(), "setting a value directly (loading, limits) is silent");
+        assertTrue(knob.turnTo(10));
+        assertTrue(knob.takeSound().pitch() > low.pitch(), "steps rise with the value");
+        knob.setMax(10);
+        assertFalse(knob.click(0, 0, false), "at its limit");
+        assertEquals(null, knob.takeSound(), "a knob that can't move doesn't click");
+
+        // a loaded part never plays the sound of whatever it was last doing
+        toggle.click(0, 0, false);
+        toggle.load(toggle.save(registries), registries);
+        assertEquals(null, toggle.takeSound());
     }
 }

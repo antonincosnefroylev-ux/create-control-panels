@@ -43,6 +43,8 @@ public abstract class PanelElement {
     private FrequencyPair frequency = FrequencyPair.EMPTY;
     /** The exact items paid to mount this part, given back when it's removed. */
     private List<ItemStack> paid = List.of();
+    /** The sound of the last change, until the console plays it. Never saved or synced. */
+    private PartSound pendingSound;
 
     protected PanelElement(PanelElementType<?> type) {
         this.type = type;
@@ -96,6 +98,7 @@ public abstract class PanelElement {
         loadOptions(tag, registries);
         // after options: a label's width depends on them
         setPos(tag.getFloat(TAG_X), tag.getFloat(TAG_Y));
+        pendingSound = null; // loading is silent
     }
 
     // --- Placement --------------------------------------------------------
@@ -194,6 +197,18 @@ public abstract class PanelElement {
     }
 
     // --- Behaviour hooks (server side) -------------------------------------
+
+    /** Notes the sound of a change just made; the console plays it once (see {@link #takeSound}). */
+    protected void sound(PartSound sound) {
+        pendingSound = sound;
+    }
+
+    /** The sound of this part's last change, if it hasn't been played yet; asking clears it. */
+    public PartSound takeSound() {
+        PartSound sound = pendingSound;
+        pendingSound = null;
+        return sound;
+    }
 
     /** Labels and other passive parts let clicks fall through to what's beneath. */
     public boolean takesClicks() {

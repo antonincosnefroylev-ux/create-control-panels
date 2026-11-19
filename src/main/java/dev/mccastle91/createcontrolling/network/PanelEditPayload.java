@@ -45,6 +45,6 @@ public record PanelEditPayload(BlockPos pos, CompoundTag op)
         if (op == null || !level.isLoaded(pos) || !McCompat.canReach(player, pos))
             return;
         if (level.getBlockEntity(pos) instanceof PanelBlockEntity panel)
-            PanelEditOps.apply(panel, op, level.registryAccess(), CostPayer.of(player));
+            PanelEditOps.apply(panel, op, level.registryAccess(), CostPayer.of(player), player);
     }
 }

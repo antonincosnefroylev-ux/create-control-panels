@@ -46,12 +46,23 @@ public abstract class AnalogElement extends PanelElement implements ColorableEle
 
     @Override
     public boolean scroll(int delta) {
-        return setValue(value + delta);
+        return turnTo(value + delta);
     }
 
     @Override
     public boolean operate(int strength) {
-        return setValue(strength);
+        return turnTo(strength);
+    }
+
+    /**
+     * Moves the control as a hand (or a computer) would: like
+     * {@link #setValue}, and heard if it moved. Returns true if it moved.
+     */
+    public boolean turnTo(int requested) {
+        boolean changed = setValue(requested);
+        if (changed)
+            sound(PartSound.detent(value));
+        return changed;
     }
 
     @Override
@@ -125,7 +136,7 @@ public abstract class AnalogElement extends PanelElement implements ColorableEle
     /** Click steps one forward; sneak-click steps one back. */
     @Override
     public boolean click(float localX, float localY, boolean sneaking) {
-        return setValue(value + (sneaking ? -1 : 1));
+        return turnTo(value + (sneaking ? -1 : 1));
     }
 
     /** Sneak-clicking an analog control steps it back rather than opening the designer. */

@@ -43,9 +43,15 @@ public final class PanelEditOps {
     }
 
     public static boolean apply(PanelBlockEntity panel, CompoundTag op, HolderLookup.Provider registries, CostPayer payer) {
+        return apply(panel, op, registries, payer, null);
+    }
+
+    /** @param actor the player making the edit, if any: they aren't sent the sound of their own drag */
+    public static boolean apply(PanelBlockEntity panel, CompoundTag op, HolderLookup.Provider registries, CostPayer payer,
+                                @org.jetbrains.annotations.Nullable net.minecraft.world.entity.player.Player actor) {
         // a knob turning is no layout change: it syncs like a click does
         if (OP_SET_VALUE.equals(op.getString(KEY_OP)))
-            return op.hasUUID("Id") && panel.setAnalogValue(op.getUUID("Id"), op.getInt("Value"));
+            return op.hasUUID("Id") && panel.setAnalogValue(op.getUUID("Id"), op.getInt("Value"), actor);
         PanelLayout layout = panel.getLayout();
         boolean changed = switch (op.getString(KEY_OP)) {
             case OP_ADD -> add(layout, op, payer);

@@ -4,6 +4,9 @@ import dev.mccastle91.createcontrolling.link.CCLink;
 import dev.mccastle91.createcontrolling.link.LinkPort;
 import dev.mccastle91.createcontrolling.panel.element.AnalogElement;
 import dev.mccastle91.createcontrolling.panel.element.PanelElement;
+import dev.mccastle91.createcontrolling.panel.element.PartSound;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.entity.player.Player;
 import dev.mccastle91.createcontrolling.util.McCompat;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -110,8 +113,10 @@ public class PanelBlockEntity extends BlockEntity {
         setChanged();
         syncToClients();
         rebuildLinkPorts();
-        for (PanelElement element : layout.elements())
+        for (PanelElement element : layout.elements()) {
+            playSound(element, null); // a part worked through an edit op (a scrolled knob)
             signalMayHaveChanged(element);
+        }
     }
 
     /** The text on a line, or nothing if no Display Link has sent it any. */
@@ -250,15 +255,32 @@ public class PanelBlockEntity extends BlockEntity {
         return true;
     }
 
-    /** A hand setting a knob or slider straight to a value. Returns true if it moved. */
-    public boolean setAnalogValue(UUID elementId, int value) {
-        if (!(layout.elementById(elementId).orElse(null) instanceof AnalogElement analog) || !analog.setValue(value))
+    /**
+     * A hand setting a knob or slider straight to a value. Returns true if it
+     * moved. {@code actor}, if given, isn't sent the sound: a player dragging
+     * the control hears each step from their own client as it happens.
+     */
+    public boolean setAnalogValue(UUID elementId, int value, @org.jetbrains.annotations.Nullable Player actor) {
+        if (!(layout.elementById(elementId).orElse(null) instanceof AnalogElement analog) || !analog.turnTo(value))
             return false;
+        playSound(analog, actor);
         onElementStateChanged(analog);
         return true;
     }
 
+    public boolean setAnalogValue(UUID elementId, int value) {
+        return setAnalogValue(elementId, value, null);
+    }
+
+    /** Plays the sound of the part's last change, if any, from the console to everyone near it but {@code except}. */
+    private void playSound(PanelElement element, @org.jetbrains.annotations.Nullable Player except) {
+        PartSound sound = element.takeSound();
+        if (sound != null && level != null && !level.isClientSide)
+            level.playSound(except, worldPosition, sound.event(), SoundSource.BLOCKS, sound.volume(), sound.pitch());
+    }
+
     private void onElementStateChanged(PanelElement element) {
+        playSound(element, null);
         notifyStrengthChanged(element.id());
         if (element.hasPersistentState())
             setChanged();
@@ -375,6 +397,7 @@ public class PanelBlockEntity extends BlockEntity {
         boolean anyChanged = false;
         for (PanelElement element : layout.elements()) {
             if (element.tick()) {
+                playSound(element, null); // a button coming back up
                 notifyStrengthChanged(element.id());
                 signalMayHaveChanged(element);
                 anyChanged = true;

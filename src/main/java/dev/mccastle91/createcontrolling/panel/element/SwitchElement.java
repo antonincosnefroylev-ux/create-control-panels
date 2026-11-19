@@ -31,6 +31,7 @@ public class SwitchElement extends PanelElement implements ColorableElement {
     @Override
     public boolean click(float localX, float localY, boolean sneaking) {
         on = !on;
+        sound(PartSound.lever(on));
         return true;
     }
 
@@ -38,6 +39,8 @@ public class SwitchElement extends PanelElement implements ColorableElement {
     public boolean operate(int strength) {
         boolean changed = on != strength > 0;
         on = strength > 0;
+        if (changed)
+            sound(PartSound.lever(on));
         return changed;
     }
 

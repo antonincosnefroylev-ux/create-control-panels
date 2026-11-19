@@ -95,13 +95,22 @@ public class CoveredSwitchElement extends PanelElement implements ColorableEleme
     @Override
     public boolean click(int zone, float localX, float localY, boolean sneaking) {
         if (sneaking)
-            return setGuardOpen(!guardOpen);
+            return workGuard(!guardOpen);
         if (!guardOpen)
-            return setGuardOpen(true);
+            return workGuard(true);
         if (zone != ZONE_LEVER)
-            return setGuardOpen(false);
+            return workGuard(false);
         on = !on;
+        sound(PartSound.lever(on));
         return true;
+    }
+
+    /** A hand lifting or closing the guard: it is heard. */
+    private boolean workGuard(boolean open) {
+        boolean changed = setGuardOpen(open);
+        if (changed)
+            sound(PartSound.lid(open));
+        return changed;
     }
 
     /** A plain click with no zone lands on the switch itself. */
@@ -121,6 +130,8 @@ public class CoveredSwitchElement extends PanelElement implements ColorableEleme
     public boolean operate(int strength) {
         boolean wantOn = strength > 0;
         boolean changed = on != wantOn || guardOpen != wantOn;
+        if (changed)
+            sound(on != wantOn ? PartSound.lever(wantOn) : PartSound.lid(wantOn));
         on = wantOn;
         guardOpen = wantOn;
         return changed;
