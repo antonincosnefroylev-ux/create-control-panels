@@ -1,6 +1,9 @@
 package dev.mccastle91.createcontrolling.client;
 
+import com.simibubi.create.foundation.gui.AllGuiTextures;
+import com.simibubi.create.foundation.gui.AllIcons;
 import dev.mccastle91.createcontrolling.panel.ComponentCosts;
+import dev.mccastle91.createcontrolling.panel.ConsoleCasing;
 import dev.mccastle91.createcontrolling.panel.ConsoleShape;
 import dev.mccastle91.createcontrolling.panel.PanelBlockEntity;
 import dev.mccastle91.createcontrolling.panel.PanelEditOps;
@@ -25,8 +28,8 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.core.BlockPos;
@@ -49,8 +52,10 @@ import java.util.UUID;
  * the server as edit ops; the screen renders whatever the client block entity
  * holds, so server echoes are the single source of truth.
  *
- * Layout: palette (with costs) on the left, the face in the middle with the
- * console's angle and front height beneath it, the selection on the right.
+ * Layout: one window in the shape of Create's menus (see {@link ConsoleGui}),
+ * coloured after the console's casing. Palette (with costs) on the left, the
+ * face in the middle, the selection on the right; the console's own shape in
+ * the footer bar, and the console itself beside the window where there is room.
  */
 public class PanelDesignerScreen extends Screen {
 
@@ -58,10 +63,17 @@ public class PanelDesignerScreen extends Screen {
     private static final int SCALE = 10;
     private static final int CANVAS = 16 * SCALE;
     private static final int COLUMN = 120;
-    private static final int GAP = 10;
+    private static final int GAP = 8;
+    /** Between the window's edge and what is in it. */
+    private static final int PAD = 5;
+    private static final int WINDOW_WIDTH = PAD + COLUMN + GAP + CANVAS + GAP + COLUMN + PAD;
+    private static final int WINDOW_HEIGHT = ConsoleGui.TITLE_HEIGHT + PAD + CANVAS + PAD + ConsoleGui.FOOTER_HEIGHT;
+    /** The console drawn beside the window: screen pixels to the block, and the room it needs. */
+    private static final int PREVIEW_SCALE = 40;
+    private static final int PREVIEW_ROOM = 72;
 
-    private static final int PLATE = 0xFF48443F;
-    private static final int GOLD_TEXT = 0xE0B160;
+    /** The face plate's texture, as on the console itself. */
+    private static final String PLATE = "create_controlling:block/console_plate";
     /**
      * Frequency slot colours, from the two markers on Create's Redstone Link
      * texture: red for the first slot, blue for the second.
@@ -72,14 +84,22 @@ public class PanelDesignerScreen extends Screen {
     private final BlockPos panelPos;
     private UUID selectedId;
 
+    private int windowX;
+    private int windowY;
+    /** Whether the console itself is drawn to the right of the window. */
+    private boolean previewShown;
     private int canvasX;
     private int canvasY;
+    private int footerY;
     private int sideX;
     private int infoY;
     private int freqLabelY;
     private int freqSlotY;
     private int optionsY;
     private int lineRowY;
+    /** Top of the typed-text field: a label's text, or the console's name. */
+    private int fieldY;
+    private int frontRowY;
     /** The frequency chooser is open; the designer hides behind it. */
     private boolean choosing;
     /** An inventory item being dragged in the chooser towards a frequency slot. */
@@ -105,7 +125,7 @@ public class PanelDesignerScreen extends Screen {
     private final List<Button> selectionOnly = new ArrayList<>();
     private final List<Button> colorOnly = new ArrayList<>();
     private final List<Button> pulseOnly = new ArrayList<>();
-    private Button guardButton;
+    private ThemedButton guardButton;
     /** Knobs and sliders: - and + either side of the lowest value, then of the highest. */
     private final List<Button> analogOnly = new ArrayList<>();
     private int limitRowY;
@@ -118,7 +138,7 @@ public class PanelDesignerScreen extends Screen {
     /** The console's own name, shown while no component is selected. */
     private EditBox nameBox;
     private final List<Button> nameOnly = new ArrayList<>();
-    private Button wrapButton;
+    private ThemedButton wrapButton;
     /** Set while the text box is filled from a label, which may hold more than now fits. */
     private boolean loadingLabelText;
     private AngleSlider angleSlider;
@@ -136,6 +156,15 @@ public class PanelDesignerScreen extends Screen {
                 && minecraft.level.getBlockEntity(panelPos) instanceof PanelBlockEntity panel)
             return panel;
         return null;
+    }
+
+    private CasingTheme theme() {
+        PanelBlockEntity panel = panel();
+        return CasingTheme.of(panel == null ? ConsoleCasing.DEFAULT : panel.casing());
+    }
+
+    private ThemedButton button(Component text, Button.OnPress onPress, int x, int y, int width) {
+        return addRenderableWidget(new ThemedButton(x, y, width, 14, text, onPress));
     }
 
     private PanelLayout layout() {
@@ -171,11 +200,15 @@ public class PanelDesignerScreen extends Screen {
         shapeOnly.clear();
         nameOnly.clear();
 
-        int total = COLUMN + GAP + CANVAS + GAP + COLUMN;
-        int paletteX = width / 2 - total / 2;
+        // the console is shown beside the window, which moves over to make room for it
+        previewShown = width - WINDOW_WIDTH >= PREVIEW_ROOM + 8;
+        windowX = (width - WINDOW_WIDTH - (previewShown ? PREVIEW_ROOM : 0)) / 2;
+        windowY = Math.max(2, (height - WINDOW_HEIGHT) / 2);
+        int paletteX = windowX + PAD;
         canvasX = paletteX + COLUMN + GAP;
-        canvasY = Math.max(24, height / 2 - CANVAS / 2 - 20);
+        canvasY = windowY + ConsoleGui.TITLE_HEIGHT + PAD;
         sideX = canvasX + CANVAS + GAP;
+        footerY = canvasY + CANVAS + PAD;
 
         // Palette: one add-button per component, cost in the tooltip
         int index = 0;
@@ -183,135 +216,100 @@ public class PanelDesignerScreen extends Screen {
             String id = type.id();
             // a board is nearly as wide as the face: it starts centred, with even margins
             float addX = type == PanelElements.DISPLAY_BOARD ? (PanelElement.FACE_SIZE - type.width()) / 2 : 6;
-            palette.add(addRenderableWidget(Button.builder(Component.translatable("gui.create_controlling.add." + id), b -> sendAdd(id, addX))
-                    .bounds(paletteX + (index % 2) * 60, canvasY + (index / 2) * 16, 58, 14)
-                    .tooltip(Tooltip.create(costTooltip(type)))
-                    .build()));
+            palette.add(button(Component.translatable("gui.create_controlling.add." + id), b -> sendAdd(id, addX),
+                    paletteX + (index % 2) * 60, canvasY + (index / 2) * 16, 58).tooltip(costTooltip(type)));
             index++;
         }
 
-        // Console shape, beneath the face
-        int shapeY = canvasY + CANVAS + 6;
+        // Console shape, in the footer: front height under the palette, angle under the face
+        int shapeY = footerY + (ConsoleGui.FOOTER_HEIGHT - 14) / 2;
+        frontRowY = shapeY;
+        shapeOnly.add(button(Component.literal("-"), b -> sendFront(-0.5f), paletteX, shapeY, 14));
+        shapeOnly.add(button(Component.literal("+"), b -> sendFront(0.5f), paletteX + COLUMN - 16, shapeY, 14));
         angleSlider = addRenderableWidget(new AngleSlider(canvasX, shapeY, CANVAS, 14));
-        // a wall console can raise either edge: a third button swaps which
-        int buttons = isWall() ? 3 : 2;
-        int buttonWidth = (CANVAS - 2 * (buttons - 1)) / buttons;
-        shapeOnly.add(addRenderableWidget(Button.builder(Component.literal("Front -"), b -> sendFront(-0.5f))
-                .bounds(canvasX, shapeY + 16, buttonWidth, 14).build()));
-        shapeOnly.add(addRenderableWidget(Button.builder(Component.literal("Front +"), b -> sendFront(0.5f))
-                .bounds(canvasX + buttonWidth + 2, shapeY + 16, buttonWidth, 14).build()));
+        // a wall console can raise either edge: one more button swaps which
         slopeButton = null;
         if (isWall())
-            slopeButton = addRenderableWidget(Button.builder(Component.empty(), b -> sendSlopeSwap())
-                    .bounds(canvasX + 2 * (buttonWidth + 2), shapeY + 16, CANVAS - 2 * (buttonWidth + 2), 14)
-                    .tooltip(Tooltip.create(Component.translatable("gui.create_controlling.raised_edge.tooltip")))
-                    .build());
+            slopeButton = button(Component.empty(), b -> sendSlopeSwap(), sideX, shapeY, COLUMN - 2 - 24)
+                    .tooltip(Component.translatable("gui.create_controlling.raised_edge.tooltip"));
+        // edits apply as they are made, so the tick only closes, as on Create's menus
+        addRenderableWidget(new ThemedButton(windowX + WINDOW_WIDTH - 6 - ThemedButton.ICON_SIZE,
+                footerY + (ConsoleGui.FOOTER_HEIGHT - ThemedButton.ICON_SIZE) / 2, AllIcons.I_CONFIRM,
+                Component.translatable("gui.create_controlling.done"), b -> onClose()));
 
-        // Selection column
+        // Selection column: its name with the bin beside it, frequency, then its options
         int y = canvasY;
         infoY = y;
-        y += 12;
-        selectionOnly.add(addRenderableWidget(Button.builder(
-                        Component.translatable("gui.create_controlling.delete"), b -> sendDelete())
-                .bounds(sideX, y, COLUMN - 2, 14).build()));
-        y += 16 + 6;
+        selectionOnly.add(addRenderableWidget(new ThemedButton(sideX + COLUMN - 2 - ThemedButton.ICON_SIZE, y,
+                AllIcons.I_TRASH, Component.translatable("gui.create_controlling.delete"), b -> sendDelete())));
+        y += ThemedButton.ICON_SIZE + 2;
         freqLabelY = y;
         y += 11;
         freqSlotY = y;
-        y += 18 + 6;
+        y += 18 + 4;
         optionsY = y;
         y += 11;
 
-        colorOnly.add(addRenderableWidget(Button.builder(
-                        Component.translatable("gui.create_controlling.color"),
-                        b -> openColorPicker(ColorTarget.COMPONENT, b))
-                .bounds(sideX, y, 58, 14).build()));
-        guardButton = addRenderableWidget(Button.builder(Component.empty(), b -> toggleGuardKeepsState())
-                .bounds(sideX, y + 16, COLUMN - 2, 14)
-                .tooltip(Tooltip.create(Component.translatable("gui.create_controlling.guard.tooltip")))
-                .build());
+        colorOnly.add(button(Component.translatable("gui.create_controlling.color"), b -> openColorPicker(ColorTarget.COMPONENT, b), sideX, y, 58));
+        guardButton = button(Component.empty(), b -> toggleGuardKeepsState(), sideX, y + 16, COLUMN - 2)
+                .tooltip(Component.translatable("gui.create_controlling.guard.tooltip"));
         limitRowY = y + 16;
         limitButtons(limitRowY, "min");
         limitButtons(limitRowY + 16, "max");
-        pulseOnly.add(addRenderableWidget(Button.builder(Component.literal("Pulse -"), b -> adjustPulse(-5))
-                .bounds(sideX, y + 16, 58, 14).build()));
-        pulseOnly.add(addRenderableWidget(Button.builder(Component.literal("Pulse +"), b -> adjustPulse(5))
-                .bounds(sideX + 60, y + 16, 58, 14).build()));
-        barOnly.add(addRenderableWidget(Button.builder(Component.literal("Length -"), b -> adjustBarLength(-1))
-                .bounds(sideX, y + 16, 58, 14).build()));
-        barOnly.add(addRenderableWidget(Button.builder(Component.literal("Length +"), b -> adjustBarLength(1))
-                .bounds(sideX + 60, y + 16, 58, 14).build()));
+        pulseOnly.add(button(Component.literal("Pulse -"), b -> adjustPulse(-5), sideX, y + 16, 58));
+        pulseOnly.add(button(Component.literal("Pulse +"), b -> adjustPulse(5), sideX + 60, y + 16, 58));
+        barOnly.add(button(Component.literal("Length -"), b -> adjustBarLength(-1), sideX, y + 16, 58));
+        barOnly.add(button(Component.literal("Length +"), b -> adjustBarLength(1), sideX + 60, y + 16, 58));
 
         // Readouts: which line each row shows, between its - and + buttons, then the size
         lineRowY = y;
         lineButtons(readoutOnly, 0, y);
         lineButtons(boardOnly, 1, y + 16);
-        boardOnly.add(addRenderableWidget(Button.builder(Component.literal("Width -"), b -> adjustReadoutSize(-1))
-                .bounds(sideX, y + 32, 58, 14).build()));
-        boardOnly.add(addRenderableWidget(Button.builder(Component.literal("Width +"), b -> adjustReadoutSize(1))
-                .bounds(sideX + 60, y + 32, 58, 14).build()));
-        stripOnly.add(addRenderableWidget(Button.builder(Component.literal("Tubes -"), b -> adjustReadoutSize(-1))
-                .bounds(sideX, y + 16, 58, 14).build()));
-        stripOnly.add(addRenderableWidget(Button.builder(Component.literal("Tubes +"), b -> adjustReadoutSize(1))
-                .bounds(sideX + 60, y + 16, 58, 14).build()));
+        boardOnly.add(button(Component.literal("Width -"), b -> adjustReadoutSize(-1), sideX, y + 32, 58));
+        boardOnly.add(button(Component.literal("Width +"), b -> adjustReadoutSize(1), sideX + 60, y + 32, 58));
+        stripOnly.add(button(Component.literal("Tubes -"), b -> adjustReadoutSize(-1), sideX, y + 16, 58));
+        stripOnly.add(button(Component.literal("Tubes +"), b -> adjustReadoutSize(1), sideX + 60, y + 16, 58));
 
-        labelTextBox = new EditBox(font, sideX, y, COLUMN - 2, 14, Component.empty());
+        fieldY = y;
+        labelTextBox = new EditBox(font, sideX + 4, y + 3, COLUMN - 2 - 8, 10, Component.empty());
+        labelTextBox.setBordered(false);
         labelTextBox.setMaxLength(LabelElement.MAX_TEXT_LENGTH);
         // typing stops when the label is full; shortening is always allowed
         labelTextBox.setFilter(text -> loadingLabelText || text.length() < labelTextBox.getValue().length()
                 || labelTextFits(text));
         addRenderableWidget(labelTextBox);
-        labelOnly.add(addRenderableWidget(Button.builder(Component.translatable("gui.create_controlling.apply"),
-                        b -> sendLabelText())
-                .bounds(sideX, y + 16, 58, 14).build()));
-        labelOnly.add(addRenderableWidget(Button.builder(
-                        Component.translatable("gui.create_controlling.align"), b -> cycleAlignment())
-                .bounds(sideX + 60, y + 16, 58, 14).build()));
-        labelOnly.add(addRenderableWidget(Button.builder(Component.literal("Size -"), b -> adjustScale(-1))
-                .bounds(sideX, y + 32, 58, 14).build()));
-        labelOnly.add(addRenderableWidget(Button.builder(Component.literal("Size +"), b -> adjustScale(1))
-                .bounds(sideX + 60, y + 32, 58, 14).build()));
-        labelOnly.add(addRenderableWidget(Button.builder(Component.literal("Width -"), b -> adjustLabelWidth(-1))
-                .bounds(sideX, y + 48, 58, 14).build()));
-        labelOnly.add(addRenderableWidget(Button.builder(Component.literal("Width +"), b -> adjustLabelWidth(1))
-                .bounds(sideX + 60, y + 48, 58, 14).build()));
-        labelOnly.add(addRenderableWidget(Button.builder(
-                        Component.translatable("gui.create_controlling.text_color"),
-                        b -> openColorPicker(ColorTarget.TEXT, b))
-                .bounds(sideX, y + 64, COLUMN - 2, 14).build()));
-        wrapButton = addRenderableWidget(Button.builder(Component.empty(), b -> toggleWrap())
-                .bounds(sideX, y + 80, COLUMN - 2, 14)
-                .tooltip(Tooltip.create(Component.translatable("gui.create_controlling.wrap.tooltip")))
-                .build());
+        labelOnly.add(button(Component.translatable("gui.create_controlling.apply"), b -> sendLabelText(), sideX, y + 16, 58));
+        labelOnly.add(button(Component.translatable("gui.create_controlling.align"), b -> cycleAlignment(), sideX + 60, y + 16, 58));
+        labelOnly.add(button(Component.literal("Size -"), b -> adjustScale(-1), sideX, y + 32, 58));
+        labelOnly.add(button(Component.literal("Size +"), b -> adjustScale(1), sideX + 60, y + 32, 58));
+        labelOnly.add(button(Component.literal("Width -"), b -> adjustLabelWidth(-1), sideX, y + 48, 58));
+        labelOnly.add(button(Component.literal("Width +"), b -> adjustLabelWidth(1), sideX + 60, y + 48, 58));
+        labelOnly.add(button(Component.translatable("gui.create_controlling.text_color"), b -> openColorPicker(ColorTarget.TEXT, b), sideX, y + 64, COLUMN - 2));
+        wrapButton = button(Component.empty(), b -> toggleWrap(), sideX, y + 80, COLUMN - 2)
+                .tooltip(Component.translatable("gui.create_controlling.wrap.tooltip"));
         labelOnly.add(wrapButton);
 
         // With nothing selected, the same spot names the console itself
-        nameBox = new EditBox(font, sideX, y, COLUMN - 2, 14, Component.translatable("gui.create_controlling.console_name"));
+        nameBox = new EditBox(font, sideX + 4, y + 3, COLUMN - 2 - 8, 10, Component.translatable("gui.create_controlling.console_name"));
+        nameBox.setBordered(false);
         nameBox.setMaxLength(PanelBlockEntity.MAX_NAME_LENGTH);
         PanelBlockEntity current = panel();
         if (current != null)
             nameBox.setValue(current.name());
         addRenderableWidget(nameBox);
-        nameOnly.add(addRenderableWidget(Button.builder(Component.translatable("gui.create_controlling.set_name"),
-                        b -> sendName())
-                .bounds(sideX, y + 16, 58, 14)
-                .tooltip(Tooltip.create(Component.translatable("gui.create_controlling.set_name.tooltip")))
-                .build()));
+        nameOnly.add(button(Component.translatable("gui.create_controlling.set_name"), b -> sendName(), sideX, y + 16, 58)
+                .tooltip(Component.translatable("gui.create_controlling.set_name.tooltip")));
     }
 
     /** One limit's row: - and + at its ends, the value drawn between them (see render). */
     private void limitButtons(int y, String key) {
-        analogOnly.add(addRenderableWidget(Button.builder(Component.literal("-"), b -> adjustLimit(key, -1))
-                .bounds(sideX, y, 14, 14).build()));
-        analogOnly.add(addRenderableWidget(Button.builder(Component.literal("+"), b -> adjustLimit(key, 1))
-                .bounds(sideX + COLUMN - 16, y, 14, 14).build()));
+        analogOnly.add(button(Component.literal("-"), b -> adjustLimit(key, -1), sideX, y, 14));
+        analogOnly.add(button(Component.literal("+"), b -> adjustLimit(key, 1), sideX + COLUMN - 16, y, 14));
     }
 
     private void lineButtons(List<Button> group, int row, int y) {
-        group.add(addRenderableWidget(Button.builder(Component.literal("-"), b -> adjustLine(row, -1))
-                .bounds(sideX, y, 14, 14).build()));
-        group.add(addRenderableWidget(Button.builder(Component.literal("+"), b -> adjustLine(row, 1))
-                .bounds(sideX + COLUMN - 16, y, 14, 14).build()));
+        group.add(button(Component.literal("-"), b -> adjustLine(row, -1), sideX, y, 14));
+        group.add(button(Component.literal("+"), b -> adjustLine(row, 1), sideX + COLUMN - 16, y, 14));
     }
 
     private static Component costTooltip(PanelElementType<?> type) {
@@ -431,9 +429,7 @@ public class PanelDesignerScreen extends Screen {
     public Rect2i guiArea() {
         if (choosing)
             return new Rect2i(chooserX(), chooserY(), CHOOSER_WIDTH, CHOOSER_HEIGHT);
-        // the face and its shape controls, or the option buttons beside it if lower
-        int height = Math.max(CANVAS + 6 + 30, optionsY + 11 + 94 - canvasY);
-        return new Rect2i(canvasX - GAP - COLUMN, canvasY, COLUMN + GAP + CANVAS + GAP + COLUMN, height);
+        return new Rect2i(windowX, windowY, WINDOW_WIDTH + (previewShown ? PREVIEW_ROOM : 0), WINDOW_HEIGHT);
     }
 
     /**
@@ -511,7 +507,7 @@ public class PanelDesignerScreen extends Screen {
 
     private static final int SWATCH = 16;
     private static final int SWATCH_STEP = 18;
-    private static final int PICKER_PAD = 4;
+    private static final int PICKER_PAD = 5;
     private static final int PICKER_SIZE = PICKER_PAD * 2 + 4 * SWATCH_STEP - (SWATCH_STEP - SWATCH);
 
     private void openColorPicker(ColorTarget target, Button button) {
@@ -642,12 +638,17 @@ public class PanelDesignerScreen extends Screen {
 
     // --- Input ---------------------------------------------------------------------
 
-    // Frequency chooser: title row, the two slots, then the inventory (offsets from its corner)
-    private static final int CHOOSER_WIDTH = 174;
-    private static final int CHOOSER_HEIGHT = 124;
-    private static final int CHOOSER_SLOTS_Y = 20;
-    private static final int CHOOSER_CELLS_X = 6;
-    private static final int CHOOSER_CELLS_Y = 46;
+    // Frequency chooser: a small window holding the two slots, over Create's inventory panel
+    // (offsets from the chooser's corner)
+    private static final int CHOOSER_WIDTH = 176;
+    private static final int CHOOSER_WINDOW_HEIGHT = ConsoleGui.TITLE_HEIGHT + 30 + ConsoleGui.FOOTER_HEIGHT;
+    private static final int CHOOSER_INVENTORY_Y = CHOOSER_WINDOW_HEIGHT + 2;
+    private static final int CHOOSER_HEIGHT = CHOOSER_INVENTORY_Y + 100;
+    private static final int CHOOSER_SLOTS_Y = ConsoleGui.TITLE_HEIGHT + 6;
+    /** Where Create's inventory panel has its slots: left edge, the three rows, then the hotbar. */
+    private static final int INVENTORY_CELLS_X = 7;
+    private static final int INVENTORY_ROWS_Y = 17;
+    private static final int INVENTORY_HOTBAR_Y = 75;
 
     private int chooserX() {
         return width / 2 - CHOOSER_WIDTH / 2;
@@ -672,9 +673,38 @@ public class PanelDesignerScreen extends Screen {
         return -1;
     }
 
+    private int chooserDoneX() {
+        return chooserX() + CHOOSER_WIDTH - 6 - ThemedButton.ICON_SIZE;
+    }
+
+    private int chooserDoneY() {
+        return chooserY() + CHOOSER_WINDOW_HEIGHT - ConsoleGui.FOOTER_HEIGHT
+                + (ConsoleGui.FOOTER_HEIGHT - ThemedButton.ICON_SIZE) / 2;
+    }
+
     private boolean overDoneButton(double mouseX, double mouseY) {
-        int ox = chooserX(), oy = chooserY();
-        return mouseX >= ox + CHOOSER_WIDTH - 42 && mouseX < ox + CHOOSER_WIDTH - 4 && mouseY >= oy + 4 && mouseY < oy + 18;
+        int x = chooserDoneX(), y = chooserDoneY();
+        return mouseX >= x && mouseX < x + ThemedButton.ICON_SIZE && mouseY >= y && mouseY < y + ThemedButton.ICON_SIZE;
+    }
+
+    private int chooserCellX(int column) {
+        return chooserX() + INVENTORY_CELLS_X + column * 18;
+    }
+
+    /** Display rows 0-2 = main inventory, row 3 = hotbar, set a little apart. */
+    private int chooserCellY(int row) {
+        return chooserY() + CHOOSER_INVENTORY_Y + (row == 3 ? INVENTORY_HOTBAR_Y : INVENTORY_ROWS_Y + row * 18);
+    }
+
+    /** The player inventory index of the chooser cell under the mouse, or -1. */
+    private int chooserCellAt(double mouseX, double mouseY) {
+        if (mouseX < chooserCellX(0) || mouseX >= chooserCellX(9))
+            return -1;
+        int column = (int) ((mouseX - chooserCellX(0)) / 18);
+        for (int row = 0; row < 4; row++)
+            if (mouseY >= chooserCellY(row) && mouseY < chooserCellY(row) + 18)
+                return inventoryIndex(row, column);
+        return -1;
     }
 
     private void closeChooser() {
@@ -800,11 +830,9 @@ public class PanelDesignerScreen extends Screen {
                 sendFrequency(slot, ItemStack.EMPTY);
             return;
         }
-        int cellsX = ox + CHOOSER_CELLS_X, cellsY = oy + CHOOSER_CELLS_Y;
-        if (mouseX >= cellsX && mouseX < cellsX + 9 * 18 && mouseY >= cellsY && mouseY < cellsY + 4 * 18) {
-            int column = (int) ((mouseX - cellsX) / 18);
-            int row = (int) ((mouseY - cellsY) / 18);
-            ItemStack stack = minecraft.player.getInventory().getItem(inventoryIndex(row, column));
+        int cell = chooserCellAt(mouseX, mouseY);
+        if (cell >= 0) {
+            ItemStack stack = minecraft.player.getInventory().getItem(cell);
             if (button == 0 && !stack.isEmpty())
                 carried = stack.copyWithCount(1); // nothing leaves the inventory
             return;
@@ -875,47 +903,125 @@ public class PanelDesignerScreen extends Screen {
         PanelBlockEntity panel = panel();
         PanelElement element = selected();
         updateVisibility(panel, element);
+        CasingTheme theme = theme();
 
-        super.render(graphics, mouseX, mouseY, partialTick);
+        // not super.render: the window goes between the dimmed world and the widgets
+        //? if >=1.21 {
+        renderBackground(graphics, mouseX, mouseY, partialTick);
+        //?} else {
+        /*renderBackground(graphics);
+        *///?}
         // the chooser stands alone: the designer hides while it is open
         if (choosing) {
             if (element == null || !hasFrequency(element))
                 closeChooser();
             else
-                renderChooser(graphics, element, mouseX, mouseY);
+                renderChooser(graphics, theme, element, mouseX, mouseY);
             return;
         }
-        graphics.drawString(font, title, canvasX, canvasY - 11, GOLD_TEXT);
+        ConsoleGui.window(graphics, font, theme, title, windowX, windowY, WINDOW_WIDTH, WINDOW_HEIGHT);
+        if ((labelTextBox != null && labelTextBox.visible) || (nameBox != null && nameBox.visible))
+            ConsoleGui.field(graphics, sideX, fieldY, COLUMN - 2, 14);
+        for (Renderable widget : renderables)
+            widget.render(graphics, mouseX, mouseY, partialTick);
         if (panel == null)
             return;
 
-        // The face: casing-coloured frame ring, plate inside, faint 1 px grid
-        int frameColor = panel.casing().frameColor();
-        graphics.fill(canvasX, canvasY, canvasX + CANVAS, canvasY + CANVAS, frameColor);
+        renderFace(graphics, panel);
+
+        // Front height, between its - and + in the footer; the back follows from the angle
+        ConsoleShape shape = panel.shape();
+        Component front = Component.translatable("gui.create_controlling.front", formatPx(shape.frontHeight()));
+        int frontX = windowX + PAD, frontWidth = COLUMN - 2;
+        graphics.drawString(font, front, frontX + (frontWidth - font.width(front)) / 2, frontRowY + 3,
+                ConsoleGui.PANEL_TEXT, false);
+
+        if (element != null) {
+            String header = Component.translatable("gui.create_controlling.element." + element.type().id()).getString();
+            if (element instanceof ButtonElement button)
+                header += "  " + button.pulseTicks() + "t";
+            drawFitted(graphics, header, sideX, infoY + 5, COLUMN - 2 - ThemedButton.ICON_SIZE - 3, 0xFFFFFF);
+            if (hasFrequency(element)) {
+                graphics.drawString(font, Component.translatable("gui.create_controlling.frequency_slots"),
+                        sideX, freqLabelY, theme.accent);
+                renderFrequencySlots(graphics, element, mouseX, mouseY);
+            }
+            if (element instanceof ColorableElement || element instanceof LabelElement
+                    || element instanceof ReadoutElement)
+                graphics.drawString(font, Component.translatable("gui.create_controlling.options"),
+                        sideX, optionsY, theme.accent);
+            if (element instanceof AnalogElement analog) {
+                int middle = sideX + (COLUMN - 2) / 2;
+                graphics.drawCenteredString(font, Component.translatable("gui.create_controlling.limit.min", analog.min()),
+                        middle, limitRowY + 3, 0xFFFFFF);
+                graphics.drawCenteredString(font, Component.translatable("gui.create_controlling.limit.max", analog.max()),
+                        middle, limitRowY + 16 + 3, 0xFFFFFF);
+            }
+            if (element instanceof ReadoutElement readout)
+                for (int row = 0; row < readout.rows(); row++)
+                    graphics.drawCenteredString(font, rowLabel(readout, row), sideX + (COLUMN - 2) / 2,
+                            lineRowY + row * 16 + 3, 0xFFFFFF);
+        } else {
+            graphics.drawWordWrap(font, Component.translatable("gui.create_controlling.designer_hint"),
+                    sideX, infoY + 1, COLUMN - 2, 0xDDDDDD);
+            graphics.drawString(font, Component.translatable("gui.create_controlling.console_name"),
+                    sideX, optionsY, theme.accent);
+        }
+
+        if (previewShown)
+            ConsolePreview.draw(graphics, panel, windowX + WINDOW_WIDTH + 4 + PREVIEW_ROOM / 2,
+                    windowY + WINDOW_HEIGHT - PREVIEW_SCALE, PREVIEW_SCALE, partialTick);
+
+        if (colorTarget != null) {
+            if (colorPickerApplies(element))
+                renderColorPicker(graphics, element, mouseX, mouseY);
+            else
+                colorTarget = null;
+        } else if (mouseX >= frontX + 14 && mouseX < frontX + frontWidth - 14
+                && mouseY >= frontRowY && mouseY < frontRowY + 14) {
+            graphics.renderTooltip(font, Component.translatable("gui.create_controlling.front_height",
+                    formatPx(shape.frontHeight()), formatPx(shape.backHeight())), mouseX, mouseY);
+        }
+    }
+
+    /**
+     * The face as it is on the console: the casing's own texture for the frame
+     * ring, the plate inside it, at the face's scale so one texture pixel is
+     * one face pixel. Then a faint 1 px grid, the components and the drag ghost.
+     */
+    private void renderFace(GuiGraphics graphics, PanelBlockEntity panel) {
+        frame(graphics, canvasX - 1, canvasY - 1, canvasX + CANVAS + 1, canvasY + CANVAS + 1, 0xFF000000);
+        graphics.blit(canvasX, canvasY, 0, CANVAS, CANVAS, ComponentPainter.sprite(panel.casing().texture()));
         int inner = (int) (PanelElement.AREA_MIN * SCALE);
-        graphics.fill(canvasX + inner, canvasY + inner, canvasX + CANVAS - inner, canvasY + CANVAS - inner, PLATE);
+        int x0 = canvasX + inner, y0 = canvasY + inner, x1 = canvasX + CANVAS - inner, y1 = canvasY + CANVAS - inner;
+        graphics.enableScissor(x0, y0, x1, y1);
+        graphics.blit(canvasX, canvasY, 0, CANVAS, CANVAS, ComponentPainter.sprite(PLATE));
+        graphics.disableScissor();
+        // the plate sits a little below its frame
+        graphics.fill(x0, y0, x1, y0 + 1, 0x70000000);
+        graphics.fill(x0, y0, x0 + 1, y1, 0x70000000);
         for (int i = 2; i < 15; i++) {
             int line = i % 4 == 0 ? 0x30FFFFFF : 0x14FFFFFF;
-            graphics.fill(canvasX + i * SCALE, canvasY + inner, canvasX + i * SCALE + 1, canvasY + CANVAS - inner, line);
-            graphics.fill(canvasX + inner, canvasY + i * SCALE, canvasX + CANVAS - inner, canvasY + i * SCALE + 1, line);
+            graphics.fill(canvasX + i * SCALE, y0, canvasX + i * SCALE + 1, y1, line);
+            graphics.fill(x0, canvasY + i * SCALE, x1, canvasY + i * SCALE + 1, line);
         }
 
         PanelLayout layout = panel.getLayout();
         for (PanelElement e : layout.elements()) {
-            int x0 = canvasX + Math.round(e.x() * SCALE);
-            int y0 = canvasY + Math.round(e.y() * SCALE);
-            int x1 = canvasX + Math.round((e.x() + e.width()) * SCALE);
-            int y1 = canvasY + Math.round((e.y() + e.depth()) * SCALE);
+            int ex0 = canvasX + Math.round(e.x() * SCALE);
+            int ey0 = canvasY + Math.round(e.y() * SCALE);
+            int ex1 = canvasX + Math.round((e.x() + e.width()) * SCALE);
+            int ey1 = canvasY + Math.round((e.y() + e.depth()) * SCALE);
             if (e instanceof LabelElement label) {
-                frame(graphics, x0, y0, x1, y1, 0x30FFFFFF);
-                drawLabel(graphics, label, x0, y0, x1, y1);
+                frame(graphics, ex0, ey0, ex1, ey1, 0x30FFFFFF);
+                drawLabel(graphics, label, ex0, ey0, ex1, ey1);
             } else {
-                graphics.fill(x0, y0, x1, y1, 0xFF2A2724);
-                graphics.fill(x0 + 1, y0 + 1, x1 - 1, y1 - 1, fillOf(e));
-                drawGlyph(graphics, e, x0, y0, x1, y1);
+                graphics.fill(ex0, ey0, ex1, ey1, 0xFF2A2724);
+                graphics.fill(ex0 + 1, ey0 + 1, ex1 - 1, ey1 - 1, fillOf(e));
+                drawGlyph(graphics, e, ex0, ey0, ex1, ey1);
             }
             if (e.id().equals(selectedId))
-                frame(graphics, x0 - 1, y0 - 1, x1 + 1, y1 + 1, 0xFFFFFFFF);
+                frame(graphics, ex0 - 1, ey0 - 1, ex1 + 1, ey1 + 1, 0xFFFFFFFF);
         }
 
         // Drag ghost: white where the component may land, red where it can't
@@ -930,51 +1036,21 @@ public class PanelDesignerScreen extends Screen {
                         valid ? 0x60FFFFFF : 0x70FF4040);
             }
         }
+    }
 
-        // Shape readout next to the slider row
-        ConsoleShape shape = panel.shape();
-        graphics.drawString(font, Component.translatable("gui.create_controlling.front_height",
-                        formatPx(shape.frontHeight()), formatPx(shape.backHeight())),
-                canvasX, canvasY + CANVAS + 6 + 34, 0xBBBBBB);
-
-        if (element != null) {
-            String header = Component.translatable("gui.create_controlling.element." + element.type().id()).getString();
-            if (element instanceof ButtonElement button)
-                header += "  " + button.pulseTicks() + "t";
-            graphics.drawString(font, header, sideX, infoY, 0xFFFFFF);
-            if (hasFrequency(element)) {
-                graphics.drawString(font, Component.translatable("gui.create_controlling.frequency_slots"),
-                        sideX, freqLabelY, GOLD_TEXT);
-                renderFrequencySlots(graphics, element, mouseX, mouseY);
-            }
-            if (element instanceof ColorableElement || element instanceof LabelElement
-                    || element instanceof ReadoutElement)
-                graphics.drawString(font, Component.translatable("gui.create_controlling.options"),
-                        sideX, optionsY, GOLD_TEXT);
-            if (element instanceof AnalogElement analog) {
-                int middle = sideX + (COLUMN - 2) / 2;
-                graphics.drawCenteredString(font, Component.translatable("gui.create_controlling.limit.min", analog.min()),
-                        middle, limitRowY + 3, 0xFFFFFF);
-                graphics.drawCenteredString(font, Component.translatable("gui.create_controlling.limit.max", analog.max()),
-                        middle, limitRowY + 16 + 3, 0xFFFFFF);
-            }
-            if (element instanceof ReadoutElement readout)
-                for (int row = 0; row < readout.rows(); row++)
-                    graphics.drawCenteredString(font, rowLabel(readout, row), sideX + (COLUMN - 2) / 2,
-                            lineRowY + row * 16 + 3, 0xFFFFFF);
-        } else {
-            graphics.drawWordWrap(font, Component.translatable("gui.create_controlling.designer_hint"),
-                    sideX, infoY, COLUMN - 2, 0x999999);
-            graphics.drawString(font, Component.translatable("gui.create_controlling.console_name"),
-                    sideX, optionsY, GOLD_TEXT);
+    /** Text drawn at its normal size if it fits {@code maxWidth}, else squeezed to it. */
+    private void drawFitted(GuiGraphics graphics, String text, int x, int y, int maxWidth, int color) {
+        int textWidth = font.width(text);
+        if (textWidth <= maxWidth) {
+            graphics.drawString(font, text, x, y, color);
+            return;
         }
-
-        if (colorTarget != null) {
-            if (colorPickerApplies(element))
-                renderColorPicker(graphics, element, mouseX, mouseY);
-            else
-                colorTarget = null;
-        }
+        float k = maxWidth / (float) textWidth;
+        graphics.pose().pushPose();
+        graphics.pose().translate(x, y + (1 - k) * 4, 0);
+        graphics.pose().scale(k, k, 1f);
+        graphics.drawString(font, text, 0, 0, color);
+        graphics.pose().popPose();
     }
 
     /** "Line 2", or on a board "Top: Line 2" / "Bottom: Off". */
@@ -990,19 +1066,20 @@ public class PanelDesignerScreen extends Screen {
                 : Component.translatable("gui.create_controlling.line", line);
     }
 
-    /** The 16 dye colours as swatches, drawn above everything else on the screen. */
+    /** The 16 dye colours as swatches on a grey panel, drawn above everything else on the screen. */
     private void renderColorPicker(GuiGraphics graphics, PanelElement element, int mouseX, int mouseY) {
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 400);
         int x0 = colorPickerX, y0 = colorPickerY;
-        graphics.fill(x0, y0, x0 + PICKER_SIZE, y0 + PICKER_SIZE, 0xF0201A12);
-        graphics.fill(x0 + 1, y0 + 1, x0 + PICKER_SIZE - 1, y0 + PICKER_SIZE - 1, 0xFF33291C);
+        ConsoleGui.panel(graphics, x0, y0, PICKER_SIZE, PICKER_SIZE);
         DyeColor hovered = swatchAt(mouseX, mouseY);
         for (DyeColor dye : DyeColor.values()) {
             int x = x0 + PICKER_PAD + (dye.getId() % 4) * SWATCH_STEP;
             int y = y0 + PICKER_PAD + (dye.getId() / 4) * SWATCH_STEP;
             boolean current = isCurrentColor(element, dye);
-            graphics.fill(x, y, x + SWATCH, y + SWATCH, current || dye == hovered ? 0xFFFFFFFF : 0xFF15110C);
+            ConsoleGui.slot(graphics, x, y, SWATCH);
+            if (current || dye == hovered)
+                graphics.fill(x, y, x + SWATCH, y + SWATCH, 0xFFFFFFFF);
             graphics.fill(x + 1, y + 1, x + SWATCH - 1, y + SWATCH - 1, 0xFF000000 | swatchRgb(dye));
             if (current) // a second ring so the current colour stands out from a hovered one
                 frame(graphics, x + 1, y + 1, x + SWATCH - 1, y + SWATCH - 1, 0xFF15110C);
@@ -1019,9 +1096,11 @@ public class PanelDesignerScreen extends Screen {
         analogOnly.forEach(w -> w.visible = element instanceof AnalogElement);
         if (guardButton != null) {
             guardButton.visible = element instanceof CoveredSwitchElement;
-            if (element instanceof CoveredSwitchElement guarded)
+            if (element instanceof CoveredSwitchElement guarded) {
                 guardButton.setMessage(Component.translatable(guarded.keepsState()
                         ? "gui.create_controlling.guard.keeps" : "gui.create_controlling.guard.switches_off"));
+                guardButton.setGreen(guarded.keepsState());
+            }
         }
         labelOnly.forEach(w -> w.visible = isLabel);
         barOnly.forEach(w -> w.visible = element instanceof BarMeterElement);
@@ -1033,9 +1112,11 @@ public class PanelDesignerScreen extends Screen {
         nameOnly.forEach(w -> w.visible = element == null);
         if (nameBox != null)
             nameBox.visible = element == null;
-        if (wrapButton != null && element instanceof LabelElement label)
+        if (wrapButton != null && element instanceof LabelElement label) {
             wrapButton.setMessage(Component.translatable(label.wraps()
                     ? "gui.create_controlling.wrap.on" : "gui.create_controlling.wrap.off"));
+            wrapButton.setGreen(label.wraps());
+        }
         boolean shapeable = panel != null;
         shapeOnly.forEach(w -> w.visible = shapeable);
         if (angleSlider != null) {
@@ -1105,66 +1186,67 @@ public class PanelDesignerScreen extends Screen {
         }
     }
 
+    /** A frequency slot: an item slot ringed in its link colour, brighter while lit. */
+    private void frequencySlot(GuiGraphics graphics, int x, int y, int slot, boolean lit, ItemStack stack) {
+        graphics.fill(x, y, x + 18, y + 18, (lit ? FREQ_COLORS_HOVER : FREQ_COLORS)[slot]);
+        ConsoleGui.slot(graphics, x + 1, y + 1, 16);
+        if (!stack.isEmpty())
+            graphics.renderItem(stack, x + 1, y + 1);
+    }
+
     private void renderFrequencySlots(GuiGraphics graphics, PanelElement element, int mouseX, int mouseY) {
         for (int slot = 0; slot < 2; slot++) {
             int x = sideX + slot * 22;
             boolean hovered = mouseX >= x && mouseX < x + 18 && mouseY >= freqSlotY && mouseY < freqSlotY + 18;
-            graphics.fill(x, freqSlotY, x + 18, freqSlotY + 18, (hovered ? FREQ_COLORS_HOVER : FREQ_COLORS)[slot]);
-            graphics.fill(x + 1, freqSlotY + 1, x + 17, freqSlotY + 17, 0xFF1E1913);
             ItemStack stack = slot == 0 ? element.frequency().first() : element.frequency().second();
-            if (!stack.isEmpty())
-                graphics.renderItem(stack, x + 1, freqSlotY + 1);
-            if (hovered && !stack.isEmpty())
+            frequencySlot(graphics, x, freqSlotY, slot, hovered, stack);
+            if (hovered && !stack.isEmpty() && colorTarget == null)
                 graphics.renderTooltip(font, stack, mouseX, mouseY);
         }
     }
 
     /**
      * The frequency chooser: the element's two slots, in their link colours,
-     * over the player's inventory. Items are dragged from the inventory (or
-     * from JEI) onto a slot; only the slots take them.
+     * in a small window over Create's inventory panel. Items are dragged from
+     * the inventory (or from JEI) onto a slot; only the slots take them.
      */
-    private void renderChooser(GuiGraphics graphics, PanelElement element, int mouseX, int mouseY) {
+    private void renderChooser(GuiGraphics graphics, CasingTheme theme, PanelElement element, int mouseX, int mouseY) {
         if (minecraft == null || minecraft.player == null)
             return;
         int ox = chooserX(), oy = chooserY();
-        graphics.fill(ox, oy, ox + CHOOSER_WIDTH, oy + CHOOSER_HEIGHT, 0xF0201A12);
-        graphics.fill(ox + 1, oy + 1, ox + CHOOSER_WIDTH - 1, oy + CHOOSER_HEIGHT - 1, 0xFF33291C);
-        graphics.drawString(font, Component.translatable("gui.create_controlling.pick_frequency"), ox + 6, oy + 7, GOLD_TEXT);
-        int doneX = ox + CHOOSER_WIDTH - 42;
-        graphics.fill(doneX, oy + 4, ox + CHOOSER_WIDTH - 4, oy + 18,
-                overDoneButton(mouseX, mouseY) ? 0xFF8A6A3F : 0xFF4A3E2C);
-        graphics.drawCenteredString(font, Component.translatable("gui.create_controlling.done"), doneX + 19, oy + 7, 0xFFFFFF);
+        ConsoleGui.window(graphics, font, theme, Component.translatable("gui.create_controlling.pick_frequency"),
+                ox, oy, CHOOSER_WIDTH, CHOOSER_WINDOW_HEIGHT);
+        (overDoneButton(mouseX, mouseY) ? AllGuiTextures.BUTTON_HOVER : AllGuiTextures.BUTTON)
+                .render(graphics, chooserDoneX(), chooserDoneY());
+        AllIcons.I_CONFIRM.render(graphics, chooserDoneX() + 1, chooserDoneY() + 1);
 
         boolean dragging = !carried.isEmpty();
         int hoveredSlot = chooserSlotAt(mouseX, mouseY);
         for (int slot = 0; slot < 2; slot++) {
             int x = chooserSlotX(slot), y = oy + CHOOSER_SLOTS_Y;
-            boolean lit = slot == hoveredSlot || dragging;
-            graphics.fill(x, y, x + 18, y + 18, (lit ? FREQ_COLORS_HOVER : FREQ_COLORS)[slot]);
-            graphics.fill(x + 1, y + 1, x + 17, y + 17, 0xFF1E1913);
-            if (dragging && slot == hoveredSlot)
-                graphics.fill(x + 1, y + 1, x + 17, y + 17, 0x40FFFFFF);
             ItemStack stack = slot == 0 ? element.frequency().first() : element.frequency().second();
-            if (!stack.isEmpty())
-                graphics.renderItem(stack, x + 1, y + 1);
+            frequencySlot(graphics, x, y, slot, slot == hoveredSlot || dragging, stack);
+            if (dragging && slot == hoveredSlot)
+                graphics.fill(x + 1, y + 1, x + 17, y + 17, 0x60FFFFFF);
         }
 
-        int cellsX = ox + CHOOSER_CELLS_X, cellsY = oy + CHOOSER_CELLS_Y;
+        int inventoryY = oy + CHOOSER_INVENTORY_Y;
+        AllGuiTextures.PLAYER_INVENTORY.render(graphics, ox, inventoryY);
+        graphics.drawString(font, Component.translatable("container.inventory"), ox + 8, inventoryY + 6,
+                ConsoleGui.PANEL_TEXT, false);
         ItemStack hoveredItem = ItemStack.EMPTY;
         for (int row = 0; row < 4; row++) {
             for (int column = 0; column < 9; column++) {
-                int x = cellsX + column * 18;
-                int y = cellsY + row * 18;
+                int x = chooserCellX(column), y = chooserCellY(row);
                 boolean hovered = mouseX >= x && mouseX < x + 18 && mouseY >= y && mouseY < y + 18;
-                graphics.fill(x, y, x + 18, y + 18, hovered && !dragging ? 0xFF5A4A33 : 0xFF221C14);
-                graphics.fill(x + 1, y + 1, x + 17, y + 17, 0xFF15110C);
                 ItemStack stack = minecraft.player.getInventory().getItem(inventoryIndex(row, column));
                 if (!stack.isEmpty()) {
                     graphics.renderItem(stack, x + 1, y + 1);
                     if (hovered)
                         hoveredItem = stack;
                 }
+                if (hovered && !dragging)
+                    graphics.fill(x + 1, y + 1, x + 17, y + 17, 0x80FFFFFF);
             }
         }
 
@@ -1180,6 +1262,8 @@ public class PanelDesignerScreen extends Screen {
                 graphics.renderTooltip(font, Component.translatable("gui.create_controlling.frequency_slot_hint"), mouseX, mouseY);
             else
                 graphics.renderTooltip(font, stack, mouseX, mouseY);
+        } else if (overDoneButton(mouseX, mouseY)) {
+            graphics.renderTooltip(font, Component.translatable("gui.create_controlling.done"), mouseX, mouseY);
         } else if (!hoveredItem.isEmpty()) {
             graphics.renderTooltip(font, hoveredItem, mouseX, mouseY);
         }
@@ -1224,6 +1308,33 @@ public class PanelDesignerScreen extends Screen {
         @Override
         protected void updateMessage() {
             setMessage(Component.translatable("gui.create_controlling.angle", Math.round(angle())));
+        }
+
+        /**
+         * Create's value bar (the one a wrench-held scroll opens): a dark
+         * track notched at the presets, and a brass cursor carrying the value.
+         */
+        @Override
+        public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            int x0 = getX(), x1 = x0 + width, y = getY(), top = y + 3;
+            graphics.fill(x0, top, x1, top + 8, 0xFF0E0000);
+            graphics.fill(x0 + 1, top + 1, x1 - 1, top + 7, 0xFF392A25);
+            graphics.fill(x0 + 1, top + 2, x1 - 1, top + 6, 0xFF2B1A14);
+            ConsoleGui.checker(graphics, 0x23120C, x0 + 1, top + 3, width - 2, 2);
+            // the handle's centre runs 4 px inside each end, as the vanilla slider's does
+            for (float preset : ConsoleShape.PRESETS) {
+                int notch = x0 + 4 + Math.round(preset / ConsoleShape.MAX_ANGLE * (width - 8));
+                graphics.fill(notch, top + 1, notch + 1, top + 7, 0xFF8A6A3F);
+            }
+            Component text = getMessage();
+            int cursorWidth = font.width(text) + 10;
+            int center = x0 + 4 + (int) Math.round(value * (width - 8));
+            int cx = Mth.clamp(center - cursorWidth / 2, x0, x1 - cursorWidth);
+            graphics.fill(cx, y, cx + cursorWidth, y + 14, 0xFF704630);
+            graphics.fill(cx + 1, y + 1, cx + cursorWidth - 1, y + 13, isHovered() || dragging ? 0xFFFFEB8C : 0xFFFBDC7D);
+            ConsoleGui.checker(graphics, 0xCEA05A, cx + 1, y + 2, cursorWidth - 2, 10);
+            graphics.fill(cx + 1, y + 12, cx + cursorWidth - 1, y + 13, 0xFF9C6846);
+            graphics.drawString(font, text, cx + 5, y + 3, 0x442B15, false);
         }
 
         @Override

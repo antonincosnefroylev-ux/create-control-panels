@@ -45,7 +45,6 @@ public class AnalogDragScreen extends Screen {
     /** Screen pixels per face pixel in the dial window. */
     private static final float DIAL_SCALE = 14f;
     private static final int PAD = 8;
-    private static final int GOLD_TEXT = 0xE0B160;
 
     private final BlockPos pos;
     private final UUID elementId;
@@ -203,12 +202,12 @@ public class AnalogDragScreen extends Screen {
         int x0 = width / 2 - boxWidth / 2;
         // just under the crosshair, or centred if the window is too short for that
         int y0 = Math.min(height / 2 + 14, height - boxHeight - 4);
-        graphics.fill(x0, y0, x0 + boxWidth, y0 + boxHeight, 0xF0201A12);
-        graphics.fill(x0 + 1, y0 + 1, x0 + boxWidth - 1, y0 + boxHeight - 1, 0xFF33291C);
         ConsoleCasing casing = minecraft.level.getBlockEntity(pos) instanceof PanelBlockEntity panel
                 ? panel.casing() : ConsoleCasing.DEFAULT;
+        CasingTheme theme = CasingTheme.of(casing);
+        ConsoleGui.plaque(graphics, theme, x0, y0, boxWidth, boxHeight);
         AnalogDial.draw(graphics, element, casing, value, x0 + PAD, y0 + PAD, DIAL_SCALE);
-        graphics.drawCenteredString(font, Integer.toString(value), width / 2, y0 + PAD + dialHeight + 5, GOLD_TEXT);
+        graphics.drawCenteredString(font, Integer.toString(value), width / 2, y0 + PAD + dialHeight + 5, theme.accent);
     }
 
     @Override
