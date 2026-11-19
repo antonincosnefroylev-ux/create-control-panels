@@ -24,6 +24,7 @@ public final class ComputerCraftCompat {
     }
 
     public static void init(IEventBus modEventBus) {
+        PanelBlockEntity.addSignalListener(ConsolePeripheral::signalChanged);
         //? if neoforge {
         modEventBus.addListener(RegisterCapabilitiesEvent.class, event -> event.registerBlockEntity(
                 PeripheralCapability.get(), CCContent.CONTROL_PANEL_ENTITY.get(),

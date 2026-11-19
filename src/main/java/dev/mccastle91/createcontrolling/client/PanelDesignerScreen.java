@@ -115,6 +115,9 @@ public class PanelDesignerScreen extends Screen {
     private final List<Button> boardOnly = new ArrayList<>();
     private final List<Button> stripOnly = new ArrayList<>();
     private EditBox labelTextBox;
+    /** The console's own name, shown while no component is selected. */
+    private EditBox nameBox;
+    private final List<Button> nameOnly = new ArrayList<>();
     private Button wrapButton;
     /** Set while the text box is filled from a label, which may hold more than now fits. */
     private boolean loadingLabelText;
@@ -166,6 +169,7 @@ public class PanelDesignerScreen extends Screen {
         boardOnly.clear();
         stripOnly.clear();
         shapeOnly.clear();
+        nameOnly.clear();
 
         int total = COLUMN + GAP + CANVAS + GAP + COLUMN;
         int paletteX = width / 2 - total / 2;
@@ -280,6 +284,19 @@ public class PanelDesignerScreen extends Screen {
                 .tooltip(Tooltip.create(Component.translatable("gui.create_controlling.wrap.tooltip")))
                 .build());
         labelOnly.add(wrapButton);
+
+        // With nothing selected, the same spot names the console itself
+        nameBox = new EditBox(font, sideX, y, COLUMN - 2, 14, Component.translatable("gui.create_controlling.console_name"));
+        nameBox.setMaxLength(PanelBlockEntity.MAX_NAME_LENGTH);
+        PanelBlockEntity current = panel();
+        if (current != null)
+            nameBox.setValue(current.name());
+        addRenderableWidget(nameBox);
+        nameOnly.add(addRenderableWidget(Button.builder(Component.translatable("gui.create_controlling.set_name"),
+                        b -> sendName())
+                .bounds(sideX, y + 16, 58, 14)
+                .tooltip(Tooltip.create(Component.translatable("gui.create_controlling.set_name.tooltip")))
+                .build()));
     }
 
     /** One limit's row: - and + at its ends, the value drawn between them (see render). */
@@ -352,6 +369,13 @@ public class PanelDesignerScreen extends Screen {
         tag.putFloat("Angle", angle);
         tag.putFloat("Front", front);
         tag.putBoolean("Reversed", reversed);
+        send(tag);
+    }
+
+    private void sendName() {
+        CompoundTag tag = new CompoundTag();
+        tag.putString(PanelEditOps.KEY_OP, PanelEditOps.OP_SET_NAME);
+        tag.putString("Name", nameBox.getValue());
         send(tag);
     }
 
@@ -804,6 +828,10 @@ public class PanelDesignerScreen extends Screen {
             closeChooser();
             return true;
         }
+        if (nameBox != null && nameBox.visible && nameBox.isFocused() && (keyCode == 257 || keyCode == 335)) {
+            sendName(); // Enter sets the name
+            return true;
+        }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -937,6 +965,8 @@ public class PanelDesignerScreen extends Screen {
         } else {
             graphics.drawWordWrap(font, Component.translatable("gui.create_controlling.designer_hint"),
                     sideX, infoY, COLUMN - 2, 0x999999);
+            graphics.drawString(font, Component.translatable("gui.create_controlling.console_name"),
+                    sideX, optionsY, GOLD_TEXT);
         }
 
         if (colorTarget != null) {
@@ -1000,6 +1030,9 @@ public class PanelDesignerScreen extends Screen {
         stripOnly.forEach(w -> w.visible = element instanceof NixieStripElement);
         if (labelTextBox != null)
             labelTextBox.visible = isLabel;
+        nameOnly.forEach(w -> w.visible = element == null);
+        if (nameBox != null)
+            nameBox.visible = element == null;
         if (wrapButton != null && element instanceof LabelElement label)
             wrapButton.setMessage(Component.translatable(label.wraps()
                     ? "gui.create_controlling.wrap.on" : "gui.create_controlling.wrap.off"));
