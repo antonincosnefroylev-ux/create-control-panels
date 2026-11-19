@@ -2,6 +2,7 @@ package dev.mccastle91.createcontrolling.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.mccastle91.createcontrolling.network.CCNetwork;
+import dev.mccastle91.createcontrolling.panel.ConsoleCasing;
 import dev.mccastle91.createcontrolling.panel.PanelBlockEntity;
 import dev.mccastle91.createcontrolling.panel.PanelEditOps;
 import dev.mccastle91.createcontrolling.panel.element.AnalogElement;
@@ -204,7 +205,9 @@ public class AnalogDragScreen extends Screen {
         int y0 = Math.min(height / 2 + 14, height - boxHeight - 4);
         graphics.fill(x0, y0, x0 + boxWidth, y0 + boxHeight, 0xF0201A12);
         graphics.fill(x0 + 1, y0 + 1, x0 + boxWidth - 1, y0 + boxHeight - 1, 0xFF33291C);
-        AnalogDial.draw(graphics, element, value, x0 + PAD, y0 + PAD, DIAL_SCALE);
+        ConsoleCasing casing = minecraft.level.getBlockEntity(pos) instanceof PanelBlockEntity panel
+                ? panel.casing() : ConsoleCasing.DEFAULT;
+        AnalogDial.draw(graphics, element, casing, value, x0 + PAD, y0 + PAD, DIAL_SCALE);
         graphics.drawCenteredString(font, Integer.toString(value), width / 2, y0 + PAD + dialHeight + 5, GOLD_TEXT);
     }
 

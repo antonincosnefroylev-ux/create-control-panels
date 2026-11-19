@@ -33,7 +33,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.AttachFace;
 
 /**
- * Draws a console's components as small 3D parts — brass bezels, industrial
+ * Draws a console's components as small 3D parts — metal bezels (in the casing's own metal), industrial
  * iron bodies, dye-coloured caps — standing on the sloped face. Everything is
  * placed through the same {@link PanelFaceGeometry} the click ray uses, so
  * what you see is exactly what you hit.
@@ -62,6 +62,7 @@ public class PanelBlockEntityRenderer<T extends PanelBlockEntity> implements Blo
      */
     private static final float LIFT = 0.05f;
 
+    /** {@code brass} is the parts' metal trim: brass by default, but it follows the console's casing. */
     private TextureAtlasSprite component, brass, iron, boardFront, boardSide, boardEdge;
     private int light;
     /** Ceiling consoles: parts hang, so standing text turns to read from below. */
@@ -76,7 +77,7 @@ public class PanelBlockEntityRenderer<T extends PanelBlockEntity> implements Blo
             return;
 
         component = ComponentPainter.sprite(ComponentPainter.COMPONENT);
-        brass = ComponentPainter.sprite(ComponentPainter.BRASS);
+        brass = ComponentPainter.sprite(panel.casing().trimTexture());
         iron = ComponentPainter.sprite(ComponentPainter.IRON);
         boardFront = ComponentPainter.sprite(ComponentPainter.BOARD_FRONT);
         boardSide = ComponentPainter.sprite(ComponentPainter.BOARD_SIDE);

@@ -1,6 +1,7 @@
 package dev.mccastle91.createcontrolling.client;
 
 import com.mojang.math.Axis;
+import dev.mccastle91.createcontrolling.panel.ConsoleCasing;
 import dev.mccastle91.createcontrolling.panel.element.AnalogElement;
 import dev.mccastle91.createcontrolling.panel.element.AnalogLeverElement;
 import dev.mccastle91.createcontrolling.panel.element.KnobElement;
@@ -19,7 +20,6 @@ import net.minecraft.resources.ResourceLocation;
 public final class AnalogDial {
 
     private static final ResourceLocation COMPONENT = McCompat.id("create_controlling", "textures/block/component.png");
-    private static final ResourceLocation BRASS = McCompat.id("create", "textures/block/brass_block.png");
     private static final ResourceLocation IRON = McCompat.id("create", "textures/block/industrial_iron_block.png");
 
     private static final int WHITE = 0xFFFFFFFF;
@@ -39,22 +39,25 @@ public final class AnalogDial {
      * Draws {@code element} showing {@code value}, its top-left corner at
      * ({@code x}, {@code y}), {@code scale} screen pixels per face pixel.
      */
-    public static void draw(GuiGraphics graphics, AnalogElement element, int value, float x, float y, float scale) {
+    public static void draw(GuiGraphics graphics, AnalogElement element, ConsoleCasing casing, int value,
+                            float x, float y, float scale) {
+        ResourceLocation trim = textureFile(casing.trimTexture());
         graphics.pose().pushPose();
         graphics.pose().translate(x, y, 0);
         graphics.pose().scale(scale / UNITS, scale / UNITS, 1f);
         int color = McCompat.dyeRgb(element.color());
         if (element instanceof KnobElement)
-            knob(graphics, element.width(), element.depth(), value, color, element.stops());
+            knob(graphics, trim, element.width(), element.depth(), value, color, element.stops());
         else if (element instanceof SliderElement slider)
             slider(graphics, slider, value, color);
         else if (element instanceof AnalogLeverElement)
-            lever(graphics, element.width(), element.depth(), value, color);
+            lever(graphics, trim, element.width(), element.depth(), value, color);
         graphics.pose().popPose();
     }
 
-    private static void knob(GuiGraphics graphics, float w, float d, int value, int color, int[] stops) {
-        rect(graphics, BRASS, 0, 0, w, d, WHITE);
+    private static void knob(GuiGraphics graphics, ResourceLocation trim, float w, float d, int value, int color,
+                             int[] stops) {
+        rect(graphics, trim, 0, 0, w, d, WHITE);
         float r = w / 2;
         for (int tick : new int[] { 0, AnalogElement.MAX_VALUE / 2, AnalogElement.MAX_VALUE }) {
             turned(graphics, r, d / 2, KnobElement.angleFor(tick));
@@ -102,9 +105,9 @@ public final class AnalogDial {
     }
 
     /** The lever from above: its handle's tip travels up the plate as it is pushed forward. */
-    private static void lever(GuiGraphics graphics, float w, float d, int value, int color) {
+    private static void lever(GuiGraphics graphics, ResourceLocation trim, float w, float d, int value, int color) {
         rect(graphics, IRON, 0, 0, w, d, WHITE);
-        rect(graphics, BRASS, w / 2 - 0.8f, d / 2 - 0.8f, w / 2 + 0.8f, d / 2 + 0.8f, WHITE);
+        rect(graphics, trim, w / 2 - 0.8f, d / 2 - 0.8f, w / 2 + 0.8f, d / 2 + 0.8f, WHITE);
         float glow = value > 0 ? 0.45f + 0.55f * value / AnalogElement.MAX_VALUE : 0.3f;
         rect(graphics, COMPONENT, 0.3f, 0.3f, 1.0f, 1.0f, shade(LEVER_LAMP, glow));
         double lean = Math.toRadians(AnalogLeverElement.angleFor(value));
@@ -112,6 +115,12 @@ public final class AnalogDial {
         float tipY = d / 2 - (float) Math.sin(lean) * (AnalogLeverElement.HANDLE_LENGTH - r);
         rect(graphics, IRON, w / 2 - r, Math.min(d / 2, tipY), w / 2 + r, Math.max(d / 2, tipY), WHITE);
         rect(graphics, COMPONENT, w / 2 - r, tipY - r, w / 2 + r, tipY + r, color);
+    }
+
+    /** The texture file behind a block-atlas texture name ("create:block/brass_block"). */
+    private static ResourceLocation textureFile(String texture) {
+        int colon = texture.indexOf(':');
+        return McCompat.id(texture.substring(0, colon), "textures/" + texture.substring(colon + 1) + ".png");
     }
 
     /** Pushes a pose turned {@code degrees} clockwise about face px ({@code cx}, {@code cy}); the caller pops it. */

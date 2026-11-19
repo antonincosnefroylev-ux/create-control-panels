@@ -28,7 +28,6 @@ public final class ComponentPainter {
     public static final int FULL_BRIGHT = 0xF000F0;
 
     public static final ResourceLocation COMPONENT = McCompat.id("create_controlling", "block/component");
-    public static final ResourceLocation BRASS = McCompat.id("create", "block/brass_block");
     public static final ResourceLocation IRON = McCompat.id("create", "block/industrial_iron_block");
     public static final ResourceLocation BOARD_FRONT = McCompat.id("create", "block/flap_display_front");
     public static final ResourceLocation BOARD_SIDE = McCompat.id("create", "block/flap_display_side");
@@ -47,6 +46,12 @@ public final class ComponentPainter {
         this.face = face;
         this.pose = pose;
         this.buffers = buffers;
+    }
+
+    /** The sprite for a texture named as "namespace:path" (as ConsoleCasing names its textures). */
+    public static TextureAtlasSprite sprite(String texture) {
+        int colon = texture.indexOf(':');
+        return sprite(McCompat.id(texture.substring(0, colon), texture.substring(colon + 1)));
     }
 
     public static TextureAtlasSprite sprite(ResourceLocation texture) {
