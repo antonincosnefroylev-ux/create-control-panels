@@ -3,7 +3,9 @@ package dev.mccastle91.createcontrolling.panel;
 import dev.mccastle91.createcontrolling.CreateControlling;
 import dev.mccastle91.createcontrolling.config.CCConfig;
 import dev.mccastle91.createcontrolling.panel.element.LabelElement;
+import dev.mccastle91.createcontrolling.panel.element.BarMeterElement;
 import dev.mccastle91.createcontrolling.panel.element.PanelElement;
+import dev.mccastle91.createcontrolling.panel.element.PanelElements;
 import dev.mccastle91.createcontrolling.panel.element.PanelElementType;
 import dev.mccastle91.createcontrolling.panel.element.ReadoutElement;
 import net.minecraft.core.HolderLookup;
@@ -53,6 +55,9 @@ public class PanelLayout {
         for (int i = 0; i < list.size(); i++) {
             CompoundTag elementTag = list.getCompound(i);
             String typeId = elementTag.getString(PanelElement.TAG_TYPE);
+            // 0.2.5 had one bar meter that could be turned upright; that is now the vertical part
+            if (typeId.equals(PanelElements.BAR_METER.id()) && elementTag.getBoolean(BarMeterElement.TAG_LEGACY_VERTICAL))
+                typeId = PanelElements.BAR_METER_V.id();
             PanelElementType<?> type = PanelElementType.byId(typeId);
             if (type == null) {
                 CreateControlling.LOGGER.warn("Skipping panel component of unknown type '{}'", typeId);

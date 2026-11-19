@@ -27,7 +27,7 @@ versions/<target>/build/   per-target outputs (Stonecutter generates each target
 ```
 PanelBlockEntity                – one console: ConsoleShape (angle, front height), ConsoleCasing, PanelLayout
  └─ PanelLayout                 – components on the 16×16 px face (design area 1..15 px); capped by config
-     └─ PanelElement (abstract) – UUID id, float px position on a 0.5 px grid, FrequencyPair; size fixed by type (labels, bar meters and readouts set their own width)
+     └─ PanelElement (abstract) – UUID id, float px position on a 0.5 px grid, FrequencyPair; size fixed by type (labels, bar meters and readouts set their own width or length)
          ├─ transmitters        – ButtonElement (button, large_button; pulseTicks), LatchingButtonElement,
          │                        SwitchElement, CoveredSwitchElement (guard open/closed + lever on/off),
          │                        AnalogElement → KnobElement, SliderElement (value 0-15)

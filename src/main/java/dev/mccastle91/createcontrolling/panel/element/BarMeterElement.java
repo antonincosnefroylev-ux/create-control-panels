@@ -6,26 +6,32 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.item.DyeColor;
 
 /**
- * Bar meter: a lit bar filling with its frequency's strength — left to right,
- * or bottom to top when set vertical. Its length is set per meter, from
+ * Bar meter: a lit bar filling with its frequency's strength. Like sliders it
+ * comes as two parts: the horizontal one fills left to right, the vertical
+ * one from the near edge up. Its length is set per meter, from
  * {@link #MIN_LENGTH} px to the whole design area's side.
  */
 public class BarMeterElement extends ReceiverElement implements ColorableElement {
 
     public static final String TAG_COLOR = "Color";
     public static final String TAG_LENGTH = "Length";
-    public static final String TAG_VERTICAL = "Vertical";
+    /**
+     * In 0.2.5 one bar meter part could be turned upright, saved with this
+     * flag. Such a meter now loads as the vertical part (see PanelLayout).
+     */
+    public static final String TAG_LEGACY_VERTICAL = "Vertical";
     public static final DyeColor DEFAULT_COLOR = DyeColor.LIME;
     public static final float MIN_LENGTH = 3f;
     public static final float MAX_LENGTH = AREA_MAX - AREA_MIN;
 
+    private final boolean vertical;
     private DyeColor color = DEFAULT_COLOR;
     private float length;
-    private boolean vertical;
 
-    public BarMeterElement(PanelElementType<? extends BarMeterElement> type) {
+    public BarMeterElement(PanelElementType<? extends BarMeterElement> type, boolean vertical) {
         super(type);
-        length = type.width();
+        this.vertical = vertical;
+        length = defaultLength();
     }
 
     @Override
@@ -45,17 +51,15 @@ public class BarMeterElement extends ReceiverElement implements ColorableElement
 
     /** The bar's short side, px. */
     public float thickness() {
-        return type().depth();
+        return vertical ? type().width() : type().depth();
+    }
+
+    private float defaultLength() {
+        return vertical ? type().depth() : type().width();
     }
 
     public boolean isVertical() {
         return vertical;
-    }
-
-    /** Turns the bar as given; the caller checks it fits. */
-    public void setVertical(boolean vertical) {
-        this.vertical = vertical;
-        reclamp();
     }
 
     /** The length a meter may take: clamped and snapped, before any overlap check. */
@@ -83,14 +87,11 @@ public class BarMeterElement extends ReceiverElement implements ColorableElement
     protected void saveOptions(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putString(TAG_COLOR, color.getName());
         tag.putFloat(TAG_LENGTH, length);
-        if (vertical)
-            tag.putBoolean(TAG_VERTICAL, true);
     }
 
     @Override
     protected void loadOptions(CompoundTag tag, HolderLookup.Provider registries) {
         setColor(DyeColor.byName(tag.getString(TAG_COLOR), DEFAULT_COLOR));
-        vertical = tag.getBoolean(TAG_VERTICAL);
-        setLength(tag.contains(TAG_LENGTH) ? tag.getFloat(TAG_LENGTH) : type().width());
+        setLength(tag.contains(TAG_LENGTH) ? tag.getFloat(TAG_LENGTH) : defaultLength());
     }
 }

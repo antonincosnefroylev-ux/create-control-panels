@@ -122,9 +122,7 @@ public final class PanelEditOps {
         PanelElement element = elementFor(layout, op);
         String key = op.getString("Key");
         if (element instanceof BarMeterElement bar && key.equals("length"))
-            return reshapeBar(layout, bar, op.getFloat("Value"), bar.isVertical());
-        if (element instanceof BarMeterElement bar && key.equals("vertical"))
-            return reshapeBar(layout, bar, bar.length(), op.getBoolean("Value"));
+            return resizeBar(layout, bar, op.getFloat("Value"));
         // a limit that would pass the other one is refused: nothing changes
         if (element instanceof AnalogElement analog && key.equals("min"))
             return analog.setMin(op.getInt("Value"));
@@ -136,21 +134,20 @@ public final class PanelEditOps {
     }
 
     /**
-     * Lengthens, shortens or turns a bar meter, keeping its top-left corner
-     * and sliding it back onto the face if it would run off; refused if it
-     * would overlap a neighbour.
+     * Lengthens or shortens a bar meter, keeping its top-left corner and
+     * sliding it back onto the face if it would run off; refused if it would
+     * overlap a neighbour.
      */
-    private static boolean reshapeBar(PanelLayout layout, BarMeterElement bar, float requested, boolean vertical) {
+    private static boolean resizeBar(PanelLayout layout, BarMeterElement bar, float requested) {
         float length = BarMeterElement.clampLength(requested);
-        if (length == bar.length() && vertical == bar.isVertical())
+        if (length == bar.length())
             return false;
-        float width = vertical ? bar.thickness() : length;
-        float depth = vertical ? length : bar.thickness();
+        float width = bar.isVertical() ? bar.thickness() : length;
+        float depth = bar.isVertical() ? length : bar.thickness();
         float x = Math.min(bar.x(), PanelElement.AREA_MAX - width);
         float y = Math.min(bar.y(), PanelElement.AREA_MAX - depth);
         if (!layout.isAreaFree(x, y, width, depth, bar.id(), false))
             return false;
-        bar.setVertical(vertical);
         bar.setLength(length);
         bar.setPos(x, y);
         return true;

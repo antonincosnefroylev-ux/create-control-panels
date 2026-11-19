@@ -1,5 +1,6 @@
 package dev.mccastle91.createcontrolling.panel;
 
+import dev.mccastle91.createcontrolling.panel.element.AnalogLeverElement;
 import dev.mccastle91.createcontrolling.panel.element.BarMeterElement;
 import dev.mccastle91.createcontrolling.panel.element.ButtonElement;
 import dev.mccastle91.createcontrolling.panel.element.KnobElement;
@@ -484,34 +485,99 @@ class PanelEditOpsTest {
     }
 
     @Test
-    void barMetersTurnUpright() {
+    void verticalBarMeterIsItsOwnPart() {
         PanelBlockEntity panel = newPanel();
-        assertTrue(apply(panel, add("bar_meter", 1, 10)));
+        assertTrue(apply(panel, add("bar_meter_v", 1, 1)));
         BarMeterElement bar = (BarMeterElement) panel.getLayout().elements().get(0);
-        assertTrue(apply(panel, length(bar, 8)));
-
-        assertTrue(apply(panel, option(bar, "vertical", tag -> tag.putBoolean("Value", true))));
         assertTrue(bar.isVertical());
         assertEquals(2, bar.width(), "the short side lies across");
-        assertEquals(8, bar.depth(), "the length runs up the face");
-        assertEquals(PanelElement.AREA_MAX - 8, bar.y(), "slid back onto the face");
-        assertFalse(apply(panel, option(bar, "vertical", tag -> tag.putBoolean("Value", true))), "already upright");
+        assertEquals(6, bar.depth(), "starts at the default length, running up the face");
 
-        // length now grows along the face's depth
+        // length grows along the face's depth, sliding back onto the face at the near edge
+        CompoundTag move = op(PanelEditOps.OP_MOVE, bar.id());
+        move.putFloat("X", 1);
+        move.putFloat("Y", 9);
+        assertTrue(apply(panel, move));
         assertTrue(apply(panel, length(bar, 12)));
         assertEquals(12, bar.depth());
         assertEquals(2, bar.width());
+        assertEquals(PanelElement.AREA_MAX - 12, bar.y());
 
-        // a neighbour where it would lie refuses the turn back
-        assertTrue(apply(panel, add("button", 6, 3)));
-        assertFalse(apply(panel, option(bar, "vertical", tag -> tag.putBoolean("Value", false))),
-                "would run into the button");
+        // a neighbour in the way refuses the resize
+        assertTrue(apply(panel, length(bar, 8)));
+        assertTrue(apply(panel, add("button", 1, 12)));
+        assertFalse(apply(panel, length(bar, 14)), "would run into the button");
+        assertEquals(8, bar.depth());
+
+        // nothing turns a bar meter any more: across and upright are separate parts
+        apply(panel, option(bar, "vertical", tag -> tag.putBoolean("Value", false)));
         assertTrue(bar.isVertical());
 
         PanelLayout loaded = PanelLayout.load(panel.getLayout().save(registries), registries);
         BarMeterElement saved = (BarMeterElement) loaded.elementById(bar.id()).orElseThrow();
-        assertTrue(saved.isVertical(), "orientation is saved");
-        assertEquals(12, saved.depth());
+        assertEquals(PanelElements.BAR_METER_V, saved.type());
+        assertEquals(8, saved.depth(), "length is saved");
+    }
+
+    @Test
+    void turnedBarMetersFromOlderSavesBecomeTheVerticalPart() {
+        PanelBlockEntity panel = newPanel();
+        assertTrue(apply(panel, add("bar_meter", 3, 2)));
+        BarMeterElement across = (BarMeterElement) panel.getLayout().elements().get(0);
+        assertFalse(across.isVertical());
+        assertTrue(apply(panel, length(across, 9)));
+
+        // as 0.2.5 saved a bar meter that had been turned upright
+        CompoundTag saved = panel.getLayout().save(registries);
+        CompoundTag old = saved.getList(PanelLayout.TAG_ELEMENTS, net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0);
+        old.putBoolean(BarMeterElement.TAG_LEGACY_VERTICAL, true);
+
+        BarMeterElement loaded = (BarMeterElement) PanelLayout.load(saved, registries).elements().get(0);
+        assertEquals(PanelElements.BAR_METER_V, loaded.type(), "loads as the vertical part");
+        assertTrue(loaded.isVertical());
+        assertEquals(9, loaded.depth(), "keeps its length");
+        assertEquals(2, loaded.width());
+        assertEquals(3, loaded.x(), "and its place");
+        assertEquals(across.id(), loaded.id());
+
+        // and an ordinary one stays horizontal
+        old.putBoolean(BarMeterElement.TAG_LEGACY_VERTICAL, false);
+        assertEquals(PanelElements.BAR_METER, PanelLayout.load(saved, registries).elements().get(0).type());
+    }
+
+    @Test
+    void analogLeverWorksLikeTheOtherAnalogControls() {
+        PanelBlockEntity panel = newPanel();
+        assertTrue(apply(panel, add("analog_lever", 1, 1)));
+        AnalogLeverElement lever = (AnalogLeverElement) panel.getLayout().elements().get(0);
+        assertEquals(3, lever.width());
+        assertEquals(4, lever.depth());
+        assertTrue(lever.isTransmitter() && lever.takesSneakClicks() && lever.dragsVertically());
+
+        assertTrue(lever.click(0, 0, false));
+        assertEquals(1, lever.transmittedStrength(), "a click steps it forward");
+        assertTrue(lever.click(0, 0, true));
+        assertEquals(0, lever.value(), "a sneak-click steps it back");
+
+        CompoundTag set = op(PanelEditOps.OP_SET_VALUE, lever.id());
+        set.putInt("Value", 15);
+        assertTrue(apply(panel, set));
+        assertEquals(15, lever.value(), "a held drag sets it");
+
+        // pulled back at 0, upright half way, pushed forward at 15
+        assertEquals(-AnalogLeverElement.HALF_SWING, AnalogLeverElement.angleFor(0), 1e-4f);
+        assertEquals(AnalogLeverElement.HALF_SWING, AnalogLeverElement.angleFor(15), 1e-4f);
+        assertTrue(Math.abs(AnalogLeverElement.angleFor(7)) < 5);
+
+        assertTrue(apply(panel, option(lever, "max", tag -> tag.putInt("Value", 10))));
+        assertEquals(10, lever.value(), "it takes Min and Max like a knob");
+
+        PanelLayout loaded = PanelLayout.load(panel.getLayout().save(registries), registries);
+        AnalogLeverElement saved = (AnalogLeverElement) loaded.elementById(lever.id()).orElseThrow();
+        assertEquals(10, saved.value());
+        assertEquals(10, saved.max());
+        assertFalse(ComponentCosts.costOf(PanelElements.ANALOG_LEVER).isEmpty(), "it has a cost");
+        assertFalse(ComponentCosts.costOf(PanelElements.BAR_METER_V).isEmpty());
     }
 
     @Test

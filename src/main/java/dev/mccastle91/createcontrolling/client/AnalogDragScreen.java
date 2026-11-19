@@ -6,7 +6,6 @@ import dev.mccastle91.createcontrolling.panel.PanelBlockEntity;
 import dev.mccastle91.createcontrolling.panel.PanelEditOps;
 import dev.mccastle91.createcontrolling.panel.element.AnalogElement;
 import dev.mccastle91.createcontrolling.panel.element.PartSound;
-import dev.mccastle91.createcontrolling.panel.element.SliderElement;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
@@ -21,7 +20,7 @@ import java.util.UUID;
 
 /**
  * Open only while the use key is held on a knob or slider. Dragging the mouse
- * sets the control: right (up, for a vertical slider) raises it, in steps —
+ * sets the control: right (up, for a vertical slider or a lever) raises it, in steps —
  * the mouse has to travel a set distance for each of the 16 values, and each
  * one clicks, like the detents of a real rotary switch. Letting go closes it.
  *
@@ -69,7 +68,7 @@ public class AnalogDragScreen extends Screen {
         this.pos = pos;
         this.elementId = element.id();
         this.popup = popup;
-        this.vertical = element instanceof SliderElement slider && slider.isVertical();
+        this.vertical = element.dragsVertically();
         this.value = element.value();
         this.min = element.min();
         this.max = element.max();

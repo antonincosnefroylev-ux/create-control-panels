@@ -116,7 +116,6 @@ public class PanelDesignerScreen extends Screen {
     private final List<Button> stripOnly = new ArrayList<>();
     private EditBox labelTextBox;
     private Button wrapButton;
-    private Button barTurnButton;
     /** Set while the text box is filled from a label, which may hold more than now fits. */
     private boolean loadingLabelText;
     private AngleSlider angleSlider;
@@ -238,9 +237,6 @@ public class PanelDesignerScreen extends Screen {
                 .bounds(sideX, y + 16, 58, 14).build()));
         barOnly.add(addRenderableWidget(Button.builder(Component.literal("Length +"), b -> adjustBarLength(1))
                 .bounds(sideX + 60, y + 16, 58, 14).build()));
-        barTurnButton = addRenderableWidget(Button.builder(Component.empty(), b -> turnBar())
-                .bounds(sideX + 60, y, 58, 14).build());
-        barOnly.add(barTurnButton);
 
         // Readouts: which line each row shows, between its - and + buttons, then the size
         lineRowY = y;
@@ -472,11 +468,6 @@ public class PanelDesignerScreen extends Screen {
     private void adjustBarLength(float delta) {
         if (selected() instanceof BarMeterElement bar)
             sendOption("length", tag -> tag.putFloat("Value", bar.length() + delta));
-    }
-
-    private void turnBar() {
-        if (selected() instanceof BarMeterElement bar)
-            sendOption("vertical", tag -> tag.putBoolean("Value", !bar.isVertical()));
     }
 
     private void adjustLine(int row, int delta) {
@@ -1012,9 +1003,6 @@ public class PanelDesignerScreen extends Screen {
         if (wrapButton != null && element instanceof LabelElement label)
             wrapButton.setMessage(Component.translatable(label.wraps()
                     ? "gui.create_controlling.wrap.on" : "gui.create_controlling.wrap.off"));
-        if (barTurnButton != null && element instanceof BarMeterElement bar)
-            barTurnButton.setMessage(Component.translatable(bar.isVertical()
-                    ? "gui.create_controlling.bar.vertical" : "gui.create_controlling.bar.horizontal"));
         boolean shapeable = panel != null;
         shapeOnly.forEach(w -> w.visible = shapeable);
         if (angleSlider != null) {

@@ -24,6 +24,8 @@ public final class PanelElements {
             PanelElementType.register("slider_h", type -> new SliderElement(type, false), 8, 1.5f, 1f);
     public static final PanelElementType<SliderElement> SLIDER_V =
             PanelElementType.register("slider_v", type -> new SliderElement(type, true), 1.5f, 8, 1f);
+    public static final PanelElementType<AnalogLeverElement> ANALOG_LEVER =
+            PanelElementType.register("analog_lever", AnalogLeverElement::new, 3, 4, 3.2f);
 
     // Inputs
     public static final PanelElementType<LampElement> LAMP =
@@ -32,9 +34,12 @@ public final class PanelElements {
             PanelElementType.register("large_lamp", LampElement::new, 4, 4, 0.5f);
     public static final PanelElementType<NeedleMeterElement> NEEDLE_METER =
             PanelElementType.register("needle_meter", NeedleMeterElement::new, 6, 5, 0.5f);
-    // default length; each bar meter sets its own (see BarMeterElement)
+    // default lengths; each bar meter sets its own (see BarMeterElement). The horizontal one keeps
+    // the id the single bar meter had before it was split in two, so older consoles load as they were
     public static final PanelElementType<BarMeterElement> BAR_METER =
-            PanelElementType.register("bar_meter", BarMeterElement::new, 6, 2, 0.5f);
+            PanelElementType.register("bar_meter", type -> new BarMeterElement(type, false), 6, 2, 0.5f);
+    public static final PanelElementType<BarMeterElement> BAR_METER_V =
+            PanelElementType.register("bar_meter_v", type -> new BarMeterElement(type, true), 2, 6, 0.5f);
     public static final PanelElementType<NixieElement> NIXIE =
             PanelElementType.register("nixie", NixieElement::new, 6, 4, 3.5f);
 

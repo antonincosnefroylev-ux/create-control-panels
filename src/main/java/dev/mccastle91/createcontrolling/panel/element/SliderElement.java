@@ -31,6 +31,11 @@ public class SliderElement extends AnalogElement {
         return vertical;
     }
 
+    @Override
+    public boolean dragsVertically() {
+        return vertical;
+    }
+
     /** Where the handle's centre sits for a value, px along the slider from its left (or far) end. */
     public float handleCentre(int value) {
         float length = vertical ? depth() : width();

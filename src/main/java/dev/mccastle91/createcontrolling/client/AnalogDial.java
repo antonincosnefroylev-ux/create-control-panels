@@ -2,6 +2,7 @@ package dev.mccastle91.createcontrolling.client;
 
 import com.mojang.math.Axis;
 import dev.mccastle91.createcontrolling.panel.element.AnalogElement;
+import dev.mccastle91.createcontrolling.panel.element.AnalogLeverElement;
 import dev.mccastle91.createcontrolling.panel.element.KnobElement;
 import dev.mccastle91.createcontrolling.panel.element.SliderElement;
 import dev.mccastle91.createcontrolling.util.McCompat;
@@ -26,6 +27,7 @@ public final class AnalogDial {
     private static final int POINTER = 0xFFF0F0F0;
     /** The stop marks of a limited control, as on the console. */
     private static final int STOP = 0xFFB3261E;
+    private static final int LEVER_LAMP = 0xFFFF2A1A;
 
     /** Drawing units per face pixel: fine enough for the parts' quarter- and tenth-pixel details. */
     private static final int UNITS = 20;
@@ -46,6 +48,8 @@ public final class AnalogDial {
             knob(graphics, element.width(), element.depth(), value, color, element.stops());
         else if (element instanceof SliderElement slider)
             slider(graphics, slider, value, color);
+        else if (element instanceof AnalogLeverElement)
+            lever(graphics, element.width(), element.depth(), value, color);
         graphics.pose().popPose();
     }
 
@@ -95,6 +99,19 @@ public final class AnalogDial {
             rect(graphics, COMPONENT, cx - m, 0.15f, cx + m, d - 0.15f, color);
             rect(graphics, COMPONENT, cx - 0.12f, 0.15f, cx + 0.12f, d - 0.15f, DARK);
         }
+    }
+
+    /** The lever from above: its handle's tip travels up the plate as it is pushed forward. */
+    private static void lever(GuiGraphics graphics, float w, float d, int value, int color) {
+        rect(graphics, IRON, 0, 0, w, d, WHITE);
+        rect(graphics, BRASS, w / 2 - 0.8f, d / 2 - 0.8f, w / 2 + 0.8f, d / 2 + 0.8f, WHITE);
+        float glow = value > 0 ? 0.45f + 0.55f * value / AnalogElement.MAX_VALUE : 0.3f;
+        rect(graphics, COMPONENT, 0.3f, 0.3f, 1.0f, 1.0f, shade(LEVER_LAMP, glow));
+        double lean = Math.toRadians(AnalogLeverElement.angleFor(value));
+        float r = AnalogLeverElement.HANDLE_HALF_WIDTH;
+        float tipY = d / 2 - (float) Math.sin(lean) * (AnalogLeverElement.HANDLE_LENGTH - r);
+        rect(graphics, IRON, w / 2 - r, Math.min(d / 2, tipY), w / 2 + r, Math.max(d / 2, tipY), WHITE);
+        rect(graphics, COMPONENT, w / 2 - r, tipY - r, w / 2 + r, tipY + r, color);
     }
 
     /** Pushes a pose turned {@code degrees} clockwise about face px ({@code cx}, {@code cy}); the caller pops it. */

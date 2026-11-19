@@ -44,7 +44,8 @@ Wrench: sneak-use cycles the angle presets; on a wall it runs 15/30/45° with th
 | slider_h / slider_v | 8×1.5 / 1.5×8 | out, analog | click sets value from hit position |
 | lamp / large_lamp | 2×2 / 4×4 | in, glow by strength | — |
 | needle_meter | 6×5 | in, needle | — |
-| bar_meter | 3–14 × 2 (length set per meter, default 6) | in, bar | — |
+| bar_meter / bar_meter_v | 3–14 × 2 / 2 × 3–14 (length set per meter, default 6) | in, bar; the vertical one fills from the near edge | — |
+| analog_lever | 3×4 | out, analog | as knob: click steps, hold-drag (up/down) sets; handle (one thickness, longer than a toggle's) leans −40°…+40°, lamp glows with the value |
 | nixie | 6×4 | in, two nixie digits 0–15 | — |
 | nixie_strip | 5.5–13 × 4 (2–5 tubes, default 4) | Display Link, one line | — |
 | display_board | 12–14 × 6 (default 12, centred) | Display Link, two rows, each its own line or off | — |
@@ -59,10 +60,10 @@ Costs (lines name an item or an item tag; an item that doesn't resolve makes tha
 | large_button | any wooden pressure plate + glowstone dust |
 | toggle_switch | lever |
 | covered_switch | lever + iron sheet |
-| knob, slider_h, slider_v | Create analog lever |
+| knob, slider_h, slider_v, analog_lever | Create analog lever |
 | lamp | redstone lamp |
 | large_lamp | 2 redstone lamps |
-| needle_meter, bar_meter | Create speedometer |
+| needle_meter, bar_meter, bar_meter_v | Create speedometer |
 | nixie | Create nixie tube |
 | nixie_strip | 2 Create nixie tubes |
 | display_board | Create display board |

@@ -5,6 +5,7 @@ import dev.mccastle91.createcontrolling.panel.PanelBlock;
 import dev.mccastle91.createcontrolling.panel.PanelBlockEntity;
 import dev.mccastle91.createcontrolling.panel.PanelFaceGeometry;
 import dev.mccastle91.createcontrolling.panel.element.AnalogElement;
+import dev.mccastle91.createcontrolling.panel.element.AnalogLeverElement;
 import dev.mccastle91.createcontrolling.panel.element.BarMeterElement;
 import dev.mccastle91.createcontrolling.panel.element.ButtonElement;
 import dev.mccastle91.createcontrolling.panel.element.ColorableElement;
@@ -41,6 +42,7 @@ public class PanelBlockEntityRenderer<T extends PanelBlockEntity> implements Blo
 
     private static final int DIAL_FACE = 0xFFEDE4D4;
     private static final int NEEDLE = 0xFFB3261E;
+    private static final int LEVER_LAMP = 0xFFFF2A1A;
     private static final int DARK = 0xFF1C1C1F;
     private static final int GLASS = 0x40F2C9A0;
     private static final int NIXIE_GLOW = 0xFFFF9A2E;
@@ -106,6 +108,8 @@ public class PanelBlockEntityRenderer<T extends PanelBlockEntity> implements Blo
                 knob(p, w, d, h, knob, color(knob));
             else if (element instanceof SliderElement slider)
                 slider(p, w, d, h, slider, color(slider));
+            else if (element instanceof AnalogLeverElement lever)
+                analogLever(p, w, d, lever.value(), color(lever));
             else if (element instanceof LampElement lamp)
                 lamp(p, w, d, h, lamp.displayStrength(), color(lamp));
             else if (element instanceof NeedleMeterElement meter)
@@ -247,6 +251,28 @@ public class PanelBlockEntityRenderer<T extends PanelBlockEntity> implements Blo
             p.box(cx - m, 0.15f, 0.25f, cx + m, d - 0.15f, h, component, color, light);
             p.plate(cx - 0.12f, 0.15f, cx + 0.12f, d - 0.15f, h + LIFT, component, DARK, light);
         }
+    }
+
+    /**
+     * Create's analog lever in miniature: an iron base, a brass pivot, a
+     * handle that leans from pulled back (0) to pushed forward (15), and a
+     * small lamp in the corner that glows brighter with the value.
+     */
+    private void analogLever(ComponentPainter p, float w, float d, int value, int color) {
+        p.box(0, 0, 0, w, d, 0.25f, iron, 0xFFFFFFFF, light);
+        p.box(w / 2 - 0.8f, d / 2 - 0.8f, 0.25f, w / 2 + 0.8f, d / 2 + 0.8f, 0.75f, brass, 0xFFFFFFFF, light);
+        boolean lit = value > 0;
+        int lamp = scale(LEVER_LAMP, lit ? 0.45f + 0.55f * value / AnalogElement.MAX_VALUE : 0.3f);
+        p.box(0.3f, 0.3f, 0.25f, 1.0f, 1.0f, 0.45f, component, lamp, lit ? ComponentPainter.FULL_BRIGHT : light);
+        // one thickness all the way up; only the colour changes at the grip
+        float r = AnalogLeverElement.HANDLE_HALF_WIDTH;
+        float rod = AnalogLeverElement.HANDLE_LENGTH - AnalogLeverElement.HANDLE_GRIP;
+        p.push();
+        p.translate(w / 2, d / 2, AnalogLeverElement.PIVOT_HEIGHT);
+        p.rotateX(AnalogLeverElement.angleFor(value));
+        p.box(-r, -r, 0, r, r, rod, iron, 0xFFFFFFFF, light);
+        p.box(-r, -r, rod, r, r, AnalogLeverElement.HANDLE_LENGTH, component, color, light);
+        p.pop();
     }
 
     /** The limits a knob marks: its lowest and highest value, where they aren't the scale's own ends. */

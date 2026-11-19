@@ -79,10 +79,12 @@ public final class ComponentCosts {
         cost(PanelElements.KNOB, "create:analog_lever", 1);
         cost(PanelElements.SLIDER_H, "create:analog_lever", 1);
         cost(PanelElements.SLIDER_V, "create:analog_lever", 1);
+        cost(PanelElements.ANALOG_LEVER, "create:analog_lever", 1);
         cost(PanelElements.LAMP, "minecraft:redstone_lamp", 1);
         cost(PanelElements.LARGE_LAMP, "minecraft:redstone_lamp", 2);
         cost(PanelElements.NEEDLE_METER, "create:speedometer", 1);
         cost(PanelElements.BAR_METER, "create:speedometer", 1);
+        cost(PanelElements.BAR_METER_V, "create:speedometer", 1);
         cost(PanelElements.NIXIE, "create:nixie_tube", 1);
         cost(PanelElements.NIXIE_STRIP, "create:nixie_tube", 2);
         cost(PanelElements.DISPLAY_BOARD, "create:display_board", 1);

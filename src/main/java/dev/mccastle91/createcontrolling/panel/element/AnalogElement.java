@@ -87,6 +87,11 @@ public abstract class AnalogElement extends PanelElement implements ColorableEle
         return changed;
     }
 
+    /** Whether a held drag raises this control by moving the mouse up rather than right. */
+    public boolean dragsVertically() {
+        return false;
+    }
+
     /** The lowest value this control goes to. */
     public int min() {
         return min;
