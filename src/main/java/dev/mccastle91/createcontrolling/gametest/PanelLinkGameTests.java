@@ -9,6 +9,7 @@ import com.simibubi.create.content.redstone.link.RedstoneLinkBlock;
 import com.simibubi.create.content.redstone.link.RedstoneLinkBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import dev.mccastle91.createcontrolling.CreateControlling;
+import dev.mccastle91.createcontrolling.compat.computercraft.ConsoleGroup;
 import dev.mccastle91.createcontrolling.compat.create.ConsoleDisplayTarget;
 import dev.mccastle91.createcontrolling.registry.CCContent;
 import dev.mccastle91.createcontrolling.panel.ConsoleShape;
@@ -430,10 +431,11 @@ public class PanelLinkGameTests {
         PanelBlockEntity panel = placePanelWith(helper, lamp);
         placeCreateLink(helper);
         int[] reported = {-1};
-        panel.addSignalListener((element, strength) -> {
-            if (element == lamp)
+        PanelBlockEntity.SignalListener listener = (console, element, strength) -> {
+            if (console == panel && element == lamp)
                 reported[0] = strength;
-        });
+        };
+        PanelBlockEntity.addSignalListener(listener);
 
         helper.startSequence()
                 .thenWaitUntil(() -> setCreateLinkFrequency(helper, lamp.frequency()))
@@ -455,7 +457,128 @@ public class PanelLinkGameTests {
                         throw new GameTestAssertException("Expected 0 after letting go, got lamp="
                                 + lamp.displayStrength() + " createLink=" + received + " reported=" + reported[0]);
                 })
+                .thenExecute(() -> PanelBlockEntity.removeSignalListener(listener))
                 .thenSucceed();
+    }
+
+    /**
+     * Issue #1: a computer works components that have no frequency. Controls
+     * operate as ever; an unlinked lamp shows what the computer sets, sends
+     * nothing anywhere, and goes dark when the computer lets go.
+     */
+    @GameTest(template = EMPTY)
+    public void automationWorksUnlinkedComponents(GameTestHelper helper) {
+        LampElement lamp = PanelElements.LAMP.create();
+        PanelBlockEntity panel = placePanelWith(helper, lamp);
+        dev.mccastle91.createcontrolling.panel.element.SwitchElement toggle = PanelElements.TOGGLE_SWITCH.create();
+        toggle.setPos(9, 9);
+        panel.getLayout().addElement(toggle);
+        panel.markLayoutChanged();
+        int[] reported = {-1};
+        PanelBlockEntity.SignalListener listener = (console, element, strength) -> {
+            if (console == panel && element == lamp)
+                reported[0] = strength;
+        };
+        PanelBlockEntity.addSignalListener(listener);
+        try {
+            if (!panel.setSignal(lamp.id(), 11) || lamp.displayStrength() != 11 || reported[0] != 11)
+                throw new GameTestAssertException("Unlinked lamp should show 11, shows " + lamp.displayStrength()
+                        + ", reported " + reported[0]);
+            if (!panel.setSignal(toggle.id(), 15) || !toggle.isOn() || toggle.transmittedStrength() != 15)
+                throw new GameTestAssertException("Unlinked switch should turn on");
+            panel.clearDrivenSignals();
+            if (lamp.displayStrength() != 0 || reported[0] != 0)
+                throw new GameTestAssertException("Unlinked lamp should go dark when the computer lets go");
+            if (!toggle.isOn())
+                throw new GameTestAssertException("A switch stays where it was put, like one flipped by hand");
+
+            // linking a lamp the computer lit hands it to the network, and unlinking it again clears it
+            panel.setSignal(lamp.id(), 5);
+            lamp.setFrequency(freq(Items.CAKE, Items.BONE));
+            panel.markLayoutChanged();
+            lamp.setFrequency(FrequencyPair.EMPTY);
+            panel.markLayoutChanged();
+            if (lamp.displayStrength() != 0)
+                throw new GameTestAssertException("A just-unlinked lamp should not keep an old value, shows "
+                        + lamp.displayStrength());
+        } finally {
+            PanelBlockEntity.removeSignalListener(listener);
+        }
+        helper.succeed();
+    }
+
+    /**
+     * A computer touching one console reaches every console joined to it and
+     * tells them apart by name or position (the peripheral's selection rules,
+     * which need no CC: Tweaked to test).
+     */
+    @GameTest(template = EMPTY)
+    public void joinedConsolesAreFoundByNameAndPosition(GameTestHelper helper) {
+        PanelBlockEntity first = placePanelWith(helper, PanelElements.LAMP.create());
+        BlockPos secondPos = PANEL_POS.east();
+        BlockPos loosePos = PANEL_POS.east(3);
+        PanelBlockEntity second = placeConsole(helper, secondPos);
+        second.getLayout().addElement(PanelElements.KNOB.create());
+        second.markLayoutChanged();
+        PanelBlockEntity loose = placeConsole(helper, loosePos);
+        PanelBlock.refreshConnections(helper.getLevel(), helper.absolutePos(secondPos));
+        PanelBlock.refreshConnections(helper.getLevel(), helper.absolutePos(loosePos));
+
+        List<PanelBlockEntity> group = ConsoleGroup.of(first);
+        if (group.size() != 2 || group.get(0) != first || !group.contains(second))
+            throw new GameTestAssertException("Expected the two joined consoles, touched one first; got " + group.size());
+        if (ConsoleGroup.of(second).size() != 2 || ConsoleGroup.of(loose).size() != 1)
+            throw new GameTestAssertException("A console standing apart must not join the group");
+
+        if (!PanelEditOps.apply(second, nameOp("  Reactor§c  "), helper.getLevel().registryAccess(), CostPayer.FREE)
+                || !second.name().equals("Reactor"))
+            throw new GameTestAssertException("Name should be set and cleaned, got '" + second.name() + "'");
+        if (ConsoleGroup.select(first, null) != first)
+            throw new GameTestAssertException("No console argument means the touched console");
+        if (ConsoleGroup.select(first, "Reactor") != second)
+            throw new GameTestAssertException("The name should find the second console");
+        BlockPos abs = helper.absolutePos(secondPos);
+        java.util.Map<String, Object> table = new java.util.HashMap<>();
+        table.put("x", (double) abs.getX());
+        table.put("y", (double) abs.getY());
+        table.put("z", (double) abs.getZ());
+        if (ConsoleGroup.select(first, table) != second)
+            throw new GameTestAssertException("A position table should find the second console");
+        if (ConsoleGroup.select(first, ConsoleGroup.describe(second)) != second)
+            throw new GameTestAssertException("A console's own description should select it");
+        assertRefused(() -> ConsoleGroup.select(first, "Nowhere"), "an unknown name");
+        BlockPos looseAbs = helper.absolutePos(loosePos);
+        assertRefused(() -> ConsoleGroup.select(first, java.util.Map.of("x", (double) looseAbs.getX(),
+                "y", (double) looseAbs.getY(), "z", (double) looseAbs.getZ())), "a console outside the group");
+        first.setName("Reactor");
+        assertRefused(() -> ConsoleGroup.select(first, "Reactor"), "a name two consoles share");
+
+        // a computer sets frequencies as the designer does
+        PanelElement knob = ConsoleGroup.component(second, 1);
+        knob.setFrequency(ConsoleGroup.frequency("minecraft:redstone", null));
+        if (!knob.frequency().first().is(Items.REDSTONE) || !knob.frequency().second().isEmpty())
+            throw new GameTestAssertException("Frequency should be redstone + blank");
+        assertRefused(() -> ConsoleGroup.frequency("minecraft:not_an_item", null), "an unknown item");
+        assertRefused(() -> ConsoleGroup.frequency("minecraft:air", null), "air");
+        if (!ConsoleGroup.frequency(null, null).isEmpty())
+            throw new GameTestAssertException("Two blank slots should unlink");
+        helper.succeed();
+    }
+
+    private static CompoundTag nameOp(String name) {
+        CompoundTag op = new CompoundTag();
+        op.putString(PanelEditOps.KEY_OP, PanelEditOps.OP_SET_NAME);
+        op.putString("Name", name);
+        return op;
+    }
+
+    private static void assertRefused(Runnable action, String what) {
+        try {
+            action.run();
+        } catch (IllegalArgumentException expected) {
+            return;
+        }
+        throw new GameTestAssertException("Should have refused " + what);
     }
 
     @GameTest(template = EMPTY)
@@ -491,12 +614,17 @@ public class PanelLinkGameTests {
         for (int x = 0; x < 7; x++)
             for (int z = 0; z < 7; z++)
                 helper.setBlock(new BlockPos(x, 0, z), Blocks.STONE.defaultBlockState());
-        helper.setBlock(PANEL_POS, CCContent.CONTROL_PANEL.getDefaultState()
-                .setValue(FaceAttachedHorizontalDirectionalBlock.FACE, AttachFace.FLOOR));
-        if (!(helper.getBlockEntity(PANEL_POS) instanceof PanelBlockEntity panel))
-            throw new GameTestAssertException("Panel block entity missing");
+        PanelBlockEntity panel = placeConsole(helper, PANEL_POS);
         panel.getLayout().addElement(element);
         panel.markLayoutChanged();
+        return panel;
+    }
+
+    private static PanelBlockEntity placeConsole(GameTestHelper helper, BlockPos pos) {
+        helper.setBlock(pos, CCContent.CONTROL_PANEL.getDefaultState()
+                .setValue(FaceAttachedHorizontalDirectionalBlock.FACE, AttachFace.FLOOR));
+        if (!(helper.getBlockEntity(pos) instanceof PanelBlockEntity panel))
+            throw new GameTestAssertException("Panel block entity missing at " + pos);
         return panel;
     }
 

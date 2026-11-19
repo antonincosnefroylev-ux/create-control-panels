@@ -172,6 +172,41 @@ public class PanelBlock extends FaceAttachedHorizontalDirectionalBlock implement
         return shape.equals(shapeAt(level, other, neighbor)) && casingAt(level, pos) == casingAt(level, other);
     }
 
+    private static final BooleanProperty[] EDGES = { CONNECT_N, CONNECT_S, CONNECT_W, CONNECT_E };
+    private static final int[][] EDGE_STEPS = { { 0, -1 }, { 0, 1 }, { -1, 0 }, { 1, 0 } };
+
+    /**
+     * The console at {@code start} and every console joined to it edge by
+     * edge, breadth-first from it (it comes first), at most {@code max}.
+     * Only looks into loaded chunks; empty if there is no console at {@code start}.
+     */
+    public static java.util.List<PanelBlockEntity> joinedConsoles(Level level, BlockPos start, int max) {
+        java.util.List<PanelBlockEntity> group = new java.util.ArrayList<>();
+        java.util.Set<BlockPos> seen = new java.util.HashSet<>();
+        java.util.ArrayDeque<BlockPos> queue = new java.util.ArrayDeque<>();
+        queue.add(start);
+        seen.add(start);
+        while (!queue.isEmpty() && group.size() < max) {
+            BlockPos pos = queue.poll();
+            if (!level.isLoaded(pos) || !(level.getBlockEntity(pos) instanceof PanelBlockEntity console))
+                continue;
+            group.add(console);
+            BlockState state = console.getBlockState();
+            if (!(state.getBlock() instanceof PanelBlock))
+                continue;
+            ConsoleOrientation orientation = ConsoleOrientation.of(state);
+            for (int i = 0; i < EDGES.length; i++) {
+                if (!state.getValue(EDGES[i]))
+                    continue;
+                Vec3 d = orientation.rotate(new Vec3(EDGE_STEPS[i][0], 0, EDGE_STEPS[i][1]));
+                BlockPos next = pos.offset((int) Math.round(d.x), (int) Math.round(d.y), (int) Math.round(d.z));
+                if (seen.add(next))
+                    queue.add(next);
+            }
+        }
+        return group;
+    }
+
     private static ConsoleShape shapeAt(BlockGetter level, BlockPos pos, BlockState state) {
         if (level.getBlockEntity(pos) instanceof PanelBlockEntity panel)
             return panel.shape();

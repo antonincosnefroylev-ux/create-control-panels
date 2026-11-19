@@ -41,8 +41,12 @@ public class PanelBlockEntity extends BlockEntity {
     public static final String TAG_DISPLAY_LINES = "DisplayLines";
     public static final String TAG_DISPLAY_LINE = "L";
     public static final String TAG_DISPLAY_TEXT = "T";
+    public static final String TAG_NAME = "Name";
+    public static final int MAX_NAME_LENGTH = 32;
 
     private PanelLayout layout = new PanelLayout();
+    /** What computers can call this console by; empty when it has none. Not copied by blueprints. */
+    private String name = "";
     private ConsoleShape shape = ConsoleShape.DEFAULT;
     private ConsoleCasing casing = ConsoleCasing.DEFAULT;
 
@@ -91,6 +95,35 @@ public class PanelBlockEntity extends BlockEntity {
 
     public ConsoleCasing casing() {
         return casing;
+    }
+
+    public String name() {
+        return name;
+    }
+
+    /** Sets the console's name (cleaned, see {@link #cleanName}); true if it changed. */
+    public boolean setName(String requested) {
+        String clean = cleanName(requested);
+        if (clean.equals(name))
+            return false;
+        name = clean;
+        setChanged();
+        syncToClients();
+        return true;
+    }
+
+    /** Printable characters only, no formatting codes, trimmed, at most {@link #MAX_NAME_LENGTH}. */
+    public static String cleanName(String requested) {
+        StringBuilder clean = new StringBuilder();
+        for (int i = 0; i < requested.length(); i++) {
+            char c = requested.charAt(i);
+            if (c == '§')
+                i++; // a formatting code: the mark and the letter after it
+            else if (c >= ' ' && c != 0x7F)
+                clean.append(c);
+        }
+        String trimmed = clean.toString().trim();
+        return trimmed.length() > MAX_NAME_LENGTH ? trimmed.substring(0, MAX_NAME_LENGTH).trim() : trimmed;
     }
 
     public void setCasing(ConsoleCasing casing) {
@@ -192,6 +225,7 @@ public class PanelBlockEntity extends BlockEntity {
     }
 
     public void rebuildLinkPorts() {
+        java.util.Set<UUID> wasLinked = new java.util.HashSet<>(linkPorts.keySet());
         linkPorts.values().forEach(LinkPort::remove);
         linkPorts.clear();
         drivePorts.values().forEach(LinkPort::remove);
@@ -216,6 +250,18 @@ public class PanelBlockEntity extends BlockEntity {
                     () -> !isRemoved());
             linkPorts.put(element.id(), port);
         }
+        // A receiver just unlinked forgets the network's last value: from now
+        // on only a computer sets what it shows
+        boolean anyReset = false;
+        for (PanelElement element : layout.elements()) {
+            if (element.isReceiver() && element.frequency().isEmpty() && wasLinked.contains(element.id())
+                    && element.receiveStrength(0)) {
+                signalMayHaveChanged(element);
+                anyReset = true;
+            }
+        }
+        if (anyReset)
+            syncToClients();
     }
 
     private void onStrengthReceived(PanelElement element, int strength) {
@@ -264,14 +310,20 @@ public class PanelBlockEntity extends BlockEntity {
     // --- Automation (computers) ----------------------------------------------
     // A computer works a console through the same link network as everything
     // else: it operates controls like a hand would, and "writes" to a lamp or
-    // meter by sending on that component's frequency from the console.
+    // meter by sending on that component's frequency from the console. Parts
+    // without a frequency are the computer's alone: it reads and sets them
+    // directly, and nothing reaches the network.
 
-    /** Told when the signal on one of the console's components changes; server only. */
+    /**
+     * Told when the signal on a component of any console changes; server only.
+     * Listeners are global so that one computer can follow a whole group of
+     * joined consoles, whichever of them it touches.
+     */
     public interface SignalListener {
-        void signalChanged(PanelElement element, int strength);
+        void signalChanged(PanelBlockEntity console, PanelElement element, int strength);
     }
 
-    private final List<SignalListener> signalListeners = new CopyOnWriteArrayList<>();
+    private static final List<SignalListener> signalListeners = new CopyOnWriteArrayList<>();
     private final Map<UUID, Integer> lastSignals = new HashMap<>();
 
     /** What a computer sends on receiver components' frequencies. Never saved: it ends with the program. */
@@ -283,25 +335,32 @@ public class PanelBlockEntity extends BlockEntity {
         return element.isTransmitter() ? element.transmittedStrength() : element.displayStrength();
     }
 
-    public void addSignalListener(SignalListener listener) {
+    public static void addSignalListener(SignalListener listener) {
         signalListeners.add(listener);
     }
 
+    public static void removeSignalListener(SignalListener listener) {
+        signalListeners.remove(listener);
+    }
+
     private void signalMayHaveChanged(PanelElement element) {
-        if (signalListeners.isEmpty() || !element.isTransmitter() && !element.isReceiver())
+        if (signalListeners.isEmpty() || level == null || level.isClientSide
+                || !element.isTransmitter() && !element.isReceiver())
             return;
         int strength = signalOf(element);
         Integer previous = lastSignals.put(element.id(), strength);
         if (previous != null && previous == strength)
             return;
         for (SignalListener listener : signalListeners)
-            listener.signalChanged(element, strength);
+            listener.signalChanged(this, element, strength);
     }
 
     /**
      * Sets a component's signal from outside: a control is operated to send
-     * {@code strength}; for a lamp, meter or other receiver the console itself
-     * sends {@code strength} on the component's frequency (0 stops sending).
+     * {@code strength}; for a lamp, meter or other receiver with a frequency
+     * the console itself sends {@code strength} on it (0 stops sending). A
+     * receiver without a frequency has no network to listen to, so it shows
+     * {@code strength} directly and nothing leaves the console.
      * Returns false if there is no such component or it has nothing to set.
      */
     public boolean setSignal(UUID elementId, int strength) {
@@ -314,8 +373,15 @@ public class PanelBlockEntity extends BlockEntity {
                 onElementStateChanged(element);
             return true;
         }
-        if (!element.isReceiver() || element.frequency().isEmpty())
+        if (!element.isReceiver())
             return false;
+        if (element.frequency().isEmpty()) {
+            if (element.receiveStrength(strength)) {
+                syncToClients();
+                signalMayHaveChanged(element);
+            }
+            return true;
+        }
         if (strength == 0) {
             drivenStrengths.remove(elementId);
             closeDrivePort(drivePorts.remove(elementId));
@@ -330,11 +396,23 @@ public class PanelBlockEntity extends BlockEntity {
         return true;
     }
 
-    /** Stops everything {@link #setSignal} is sending on receivers' frequencies. */
+    /**
+     * Ends everything {@link #setSignal} did to receivers: stops sending on
+     * their frequencies and darkens the unlinked ones, which only a computer drives.
+     */
     public void clearDrivenSignals() {
         drivenStrengths.clear();
         drivePorts.values().forEach(this::closeDrivePort);
         drivePorts.clear();
+        boolean anyChanged = false;
+        for (PanelElement element : layout.elements()) {
+            if (element.isReceiver() && element.frequency().isEmpty() && element.receiveStrength(0)) {
+                signalMayHaveChanged(element);
+                anyChanged = true;
+            }
+        }
+        if (anyChanged)
+            syncToClients();
     }
 
     /** Its strength must already read 0: listeners are told before the port leaves the network. */
@@ -431,6 +509,8 @@ public class PanelBlockEntity extends BlockEntity {
         tag.put(TAG_LAYOUT, layout.save(registries));
         tag.put(TAG_SHAPE, shape.save());
         tag.putString(TAG_CASING, casing.id());
+        if (!name.isEmpty())
+            tag.putString(TAG_NAME, name);
     }
 
     private void readData(CompoundTag tag, HolderLookup.Provider registries) {
@@ -442,6 +522,8 @@ public class PanelBlockEntity extends BlockEntity {
             casing = ConsoleCasing.byId(tag.getString(TAG_CASING));
         if (tag.contains(TAG_LAYOUT))
             layout = PanelLayout.load(tag.getCompound(TAG_LAYOUT), registries);
+        // every full save and update tag carries the name when there is one
+        name = cleanName(tag.getString(TAG_NAME));
         invalidateShapes();
         if (level != null && !level.isClientSide) {
             // Placing a console item with stored data loads after onLoad ran

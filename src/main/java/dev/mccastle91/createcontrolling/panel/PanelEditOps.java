@@ -36,6 +36,8 @@ public final class PanelEditOps {
     /** Play mode: a held drag sets a knob or slider straight to a value. */
     public static final String OP_SET_VALUE = "set_value";
     public static final String OP_SET_SHAPE = "set_shape";
+    /** The console's own name, which computers can find it by. */
+    public static final String OP_SET_NAME = "set_name";
 
     private PanelEditOps() {
     }
@@ -44,6 +46,9 @@ public final class PanelEditOps {
         // a knob turning is no layout change: it syncs like a click does
         if (OP_SET_VALUE.equals(op.getString(KEY_OP)))
             return op.hasUUID("Id") && panel.setAnalogValue(op.getUUID("Id"), op.getInt("Value"));
+        // nor is a name: it saves and syncs on its own
+        if (OP_SET_NAME.equals(op.getString(KEY_OP)))
+            return panel.setName(op.getString("Name"));
         PanelLayout layout = panel.getLayout();
         boolean changed = switch (op.getString(KEY_OP)) {
             case OP_ADD -> add(layout, op, payer);

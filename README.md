@@ -63,32 +63,43 @@ Jars land in `versions/<version>/build/libs/`. The 1.20.1 jar there is the reobf
 
 ## Computers (CC: Tweaked)
 
-With CC: Tweaked installed, a console next to a computer (or on a wired modem) is a `control_console` peripheral. The computer sees every component that has a Redstone Link role, numbered from 1 in the order they were mounted (labels and Display Link readouts are skipped). Everything still travels over Create's link network, so what a computer sets is seen by every Redstone Link on that frequency.
+With CC: Tweaked installed, a console next to a computer (or on a wired modem) is a `control_console` peripheral. The computer sees every component that has a Redstone Link role, numbered from 1 in the order they were mounted (labels and Display Link readouts are skipped).
+
+**Frequencies are optional.** A component with a frequency travels over Create's link network as usual, so what a computer sets on it is seen by every Redstone Link on that frequency. A component without one belongs to the computer alone: it can still be read and set, and nothing reaches the network.
+
+**Joined consoles.** Consoles placed side by side join into one surface, and a computer touching any of them reaches all of them. Every method takes an optional last `console` argument that picks one:
+
+- nothing: the console the computer touches;
+- a string: the console with that **name** (set in the designer: open it with nothing selected and fill in *Console Name*);
+- a table with `x`, `y`, `z`: the console at that position. Any entry from `getConsoles()`, or the console table of an event, works as-is.
 
 | Call | What it does |
 |---|---|
-| `getComponents()` | A list of tables: `index`, `type` (`button`, `toggle_switch`, `lamp`, ...), `direction` (`"transmit"` for controls, `"receive"` for lamps and meters), `value` (0-15), `frequency` (`first` / `second` item ids; a blank slot is absent), and `x` / `y` on the face in pixels. |
-| `getValue(index)` | The strength (0-15) a control is sending, or a lamp or meter is receiving. |
-| `setValue(index, value)` | On a control: operates it so it sends `value` — switches and latching buttons take anything above 0 as on, a guarded switch arms, a knob or slider moves to `value`, a momentary button gives one pulse. On a lamp or meter: the console sends `value` on that component's frequency until you set 0 or the computer shuts down or is disconnected. |
+| `getConsoles()` | The touched console and every console joined to it (the touched one first): `name` (absent if unnamed), `x` / `y` / `z`, `attached` (true for the touched one) and `components` (how many). |
+| `getComponents([console])` | A list of tables: `index`, `type` (`button`, `toggle_switch`, `lamp`, ...), `direction` (`"transmit"` for controls, `"receive"` for lamps and meters), `linked` (whether it has a frequency), `value` (0-15), `frequency` (`first` / `second` item ids; a blank slot is absent), and `x` / `y` on the face in pixels. |
+| `getValue(index[, console])` | The strength (0-15) a control is sending, or a lamp or meter shows. |
+| `setValue(index, value[, console])` | On a control: operates it so it sends `value`. Switches and latching buttons take anything above 0 as on, a guarded switch arms, a knob or slider moves to `value`, and a momentary button gives one pulse. On a linked lamp or meter, the console sends `value` on that component's frequency. On an unlinked one, the part just shows `value`. Either lasts until you set 0, or until the last computer on the joined consoles shuts down or is disconnected. |
+| `setFrequency(index, first, second[, console])` | Links a component to the frequency of two item ids (for example `"minecraft:redstone"`), as the designer does, and nothing is used up. Pass `nil` for a blank slot; two `nil`s unlink it. |
 
-Whenever a component's signal changes, attached computers get a `console_signal` event with the peripheral's name, the component's index and the new value.
+Whenever a component's signal changes on any of the joined consoles, attached computers get a `console_signal` event with the peripheral's name, the component's index, the new value and the console it is on (a table with `name`, if it has one, and `x` / `y` / `z`).
 
 ```lua
 local console = peripheral.find("control_console")
-for _, c in ipairs(console.getComponents()) do
-  print(c.index, c.type, c.direction, c.value, c.frequency.first, c.frequency.second)
+for _, c in ipairs(console.getConsoles()) do
+  print(c.name or "(unnamed)", c.x, c.y, c.z, c.components)
 end
 
-console.setValue(2, 15)                 -- light the lamp that is component 2
+console.setValue(2, 15)                 -- light the lamp that is component 2 of the touched console
+console.setValue(1, 15, "Reactor")      -- and component 1 of the console named Reactor
 while true do
-  local _, name, index, value = os.pullEvent("console_signal")
-  if index == 1 then                    -- component 1 is a switch
+  local _, name, index, value, source = os.pullEvent("console_signal")
+  if source.name == "Reactor" and index == 3 then   -- a switch on Reactor
     console.setValue(2, value)
   end
 end
 ```
 
-Editing the console in the designer can renumber its components; call `getComponents()` again after changing a design.
+Editing a console in the designer can renumber its components; call `getComponents()` again after changing a design. If a computer touches two consoles of the same group (or several are on its modems), each one is its own peripheral and each reports the group's events.
 
 ## Layout
 
