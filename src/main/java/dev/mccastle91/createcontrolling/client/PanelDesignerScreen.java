@@ -106,6 +106,9 @@ public class PanelDesignerScreen extends Screen {
     private final List<Button> colorOnly = new ArrayList<>();
     private final List<Button> pulseOnly = new ArrayList<>();
     private Button guardButton;
+    /** Knobs and sliders: - and + either side of the lowest value, then of the highest. */
+    private final List<Button> analogOnly = new ArrayList<>();
+    private int limitRowY;
     private final List<Button> labelOnly = new ArrayList<>();
     private final List<Button> barOnly = new ArrayList<>();
     private final List<Button> readoutOnly = new ArrayList<>();
@@ -157,6 +160,7 @@ public class PanelDesignerScreen extends Screen {
         selectionOnly.clear();
         colorOnly.clear();
         pulseOnly.clear();
+        analogOnly.clear();
         labelOnly.clear();
         barOnly.clear();
         readoutOnly.clear();
@@ -223,6 +227,9 @@ public class PanelDesignerScreen extends Screen {
                 .bounds(sideX, y + 16, COLUMN - 2, 14)
                 .tooltip(Tooltip.create(Component.translatable("gui.create_controlling.guard.tooltip")))
                 .build());
+        limitRowY = y + 16;
+        limitButtons(limitRowY, "min");
+        limitButtons(limitRowY + 16, "max");
         pulseOnly.add(addRenderableWidget(Button.builder(Component.literal("Pulse -"), b -> adjustPulse(-5))
                 .bounds(sideX, y + 16, 58, 14).build()));
         pulseOnly.add(addRenderableWidget(Button.builder(Component.literal("Pulse +"), b -> adjustPulse(5))
@@ -277,6 +284,14 @@ public class PanelDesignerScreen extends Screen {
                 .tooltip(Tooltip.create(Component.translatable("gui.create_controlling.wrap.tooltip")))
                 .build());
         labelOnly.add(wrapButton);
+    }
+
+    /** One limit's row: - and + at its ends, the value drawn between them (see render). */
+    private void limitButtons(int y, String key) {
+        analogOnly.add(addRenderableWidget(Button.builder(Component.literal("-"), b -> adjustLimit(key, -1))
+                .bounds(sideX, y, 14, 14).build()));
+        analogOnly.add(addRenderableWidget(Button.builder(Component.literal("+"), b -> adjustLimit(key, 1))
+                .bounds(sideX + COLUMN - 16, y, 14, 14).build()));
     }
 
     private void lineButtons(List<Button> group, int row, int y) {
@@ -431,6 +446,22 @@ public class PanelDesignerScreen extends Screen {
     private void toggleGuardKeepsState() {
         if (selected() instanceof CoveredSwitchElement guarded)
             sendOption("keeps_state", tag -> tag.putBoolean("Value", !guarded.keepsState()));
+    }
+
+    /**
+     * Steps a knob's or slider's lowest or highest value. A step that would
+     * leave 0-15 or carry one limit past the other isn't sent at all (and the
+     * server refuses it anyway), so the button simply does nothing.
+     */
+    private void adjustLimit(String key, int delta) {
+        if (!(selected() instanceof AnalogElement analog))
+            return;
+        boolean lowest = key.equals("min");
+        int next = (lowest ? analog.min() : analog.max()) + delta;
+        boolean allowed = lowest ? next >= 0 && next <= analog.max()
+                : next <= AnalogElement.MAX_VALUE && next >= analog.min();
+        if (allowed)
+            sendOption(key, tag -> tag.putInt("Value", next));
     }
 
     private void adjustPulse(int delta) {
@@ -901,6 +932,13 @@ public class PanelDesignerScreen extends Screen {
                     || element instanceof ReadoutElement)
                 graphics.drawString(font, Component.translatable("gui.create_controlling.options"),
                         sideX, optionsY, GOLD_TEXT);
+            if (element instanceof AnalogElement analog) {
+                int middle = sideX + (COLUMN - 2) / 2;
+                graphics.drawCenteredString(font, Component.translatable("gui.create_controlling.limit.min", analog.min()),
+                        middle, limitRowY + 3, 0xFFFFFF);
+                graphics.drawCenteredString(font, Component.translatable("gui.create_controlling.limit.max", analog.max()),
+                        middle, limitRowY + 16 + 3, 0xFFFFFF);
+            }
             if (element instanceof ReadoutElement readout)
                 for (int row = 0; row < readout.rows(); row++)
                     graphics.drawCenteredString(font, rowLabel(readout, row), sideX + (COLUMN - 2) / 2,
@@ -957,6 +995,7 @@ public class PanelDesignerScreen extends Screen {
         selectionOnly.forEach(w -> w.visible = element != null);
         colorOnly.forEach(w -> w.visible = element instanceof ColorableElement);
         pulseOnly.forEach(w -> w.visible = element instanceof ButtonElement);
+        analogOnly.forEach(w -> w.visible = element instanceof AnalogElement);
         if (guardButton != null) {
             guardButton.visible = element instanceof CoveredSwitchElement;
             if (element instanceof CoveredSwitchElement guarded)

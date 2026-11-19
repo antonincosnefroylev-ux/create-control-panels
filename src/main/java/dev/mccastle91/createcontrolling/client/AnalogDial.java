@@ -24,6 +24,8 @@ public final class AnalogDial {
     private static final int WHITE = 0xFFFFFFFF;
     private static final int DARK = 0xFF1C1C1F;
     private static final int POINTER = 0xFFF0F0F0;
+    /** The stop marks of a limited control, as on the console. */
+    private static final int STOP = 0xFFB3261E;
 
     /** Drawing units per face pixel: fine enough for the parts' quarter- and tenth-pixel details. */
     private static final int UNITS = 20;
@@ -41,18 +43,23 @@ public final class AnalogDial {
         graphics.pose().scale(scale / UNITS, scale / UNITS, 1f);
         int color = McCompat.dyeRgb(element.color());
         if (element instanceof KnobElement)
-            knob(graphics, element.width(), element.depth(), value, color);
+            knob(graphics, element.width(), element.depth(), value, color, element.stops());
         else if (element instanceof SliderElement slider)
-            slider(graphics, element.width(), element.depth(), slider.isVertical(), value, color);
+            slider(graphics, slider, value, color);
         graphics.pose().popPose();
     }
 
-    private static void knob(GuiGraphics graphics, float w, float d, int value, int color) {
+    private static void knob(GuiGraphics graphics, float w, float d, int value, int color, int[] stops) {
         rect(graphics, BRASS, 0, 0, w, d, WHITE);
         float r = w / 2;
         for (int tick : new int[] { 0, AnalogElement.MAX_VALUE / 2, AnalogElement.MAX_VALUE }) {
             turned(graphics, r, d / 2, KnobElement.angleFor(tick));
             rect(graphics, COMPONENT, -0.15f, -r + 0.05f, 0.15f, -r + 0.45f, DARK);
+            graphics.pose().popPose();
+        }
+        for (int stop : stops) {
+            turned(graphics, r, d / 2, KnobElement.angleFor(stop));
+            rect(graphics, COMPONENT, -0.15f, -r + 0.05f, 0.15f, -r + 0.45f, STOP);
             graphics.pose().popPose();
         }
         turned(graphics, r, d / 2, KnobElement.angleFor(value));
@@ -64,8 +71,17 @@ public final class AnalogDial {
         graphics.pose().popPose();
     }
 
-    private static void slider(GuiGraphics graphics, float w, float d, boolean vertical, int value, int color) {
+    private static void slider(GuiGraphics graphics, SliderElement slider, int value, int color) {
+        float w = slider.width(), d = slider.depth();
+        boolean vertical = slider.isVertical();
         rect(graphics, IRON, 0, 0, w, d, WHITE);
+        for (float at : slider.stopLines()) {
+            float half = SliderElement.STOP_LINE / 2;
+            if (vertical)
+                rect(graphics, COMPONENT, 0, at - half, w, at + half, STOP);
+            else
+                rect(graphics, COMPONENT, at - half, 0, at + half, d, STOP);
+        }
         float f = SliderElement.fractionFor(value);
         float m = SliderElement.END_MARGIN;
         if (vertical) {

@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import dev.mccastle91.createcontrolling.panel.PanelBlock;
 import dev.mccastle91.createcontrolling.panel.PanelBlockEntity;
 import dev.mccastle91.createcontrolling.panel.PanelFaceGeometry;
+import dev.mccastle91.createcontrolling.panel.element.AnalogElement;
 import dev.mccastle91.createcontrolling.panel.element.BarMeterElement;
 import dev.mccastle91.createcontrolling.panel.element.ButtonElement;
 import dev.mccastle91.createcontrolling.panel.element.ColorableElement;
@@ -102,9 +103,9 @@ public class PanelBlockEntityRenderer<T extends PanelBlockEntity> implements Blo
             else if (element instanceof ButtonElement button)
                 button(p, w, d, h, button.isPressed(), color(button));
             else if (element instanceof KnobElement knob)
-                knob(p, w, d, h, knob.value(), color(knob));
+                knob(p, w, d, h, knob, color(knob));
             else if (element instanceof SliderElement slider)
-                slider(p, w, d, h, slider.isVertical(), slider.value(), color(slider));
+                slider(p, w, d, h, slider, color(slider));
             else if (element instanceof LampElement lamp)
                 lamp(p, w, d, h, lamp.displayStrength(), color(lamp));
             else if (element instanceof NeedleMeterElement meter)
@@ -193,9 +194,18 @@ public class PanelBlockEntityRenderer<T extends PanelBlockEntity> implements Blo
         p.pop();
     }
 
-    private void knob(ComponentPainter p, float w, float d, float h, int value, int color) {
+    /** A limited knob gets a red tick where it stops, at either end it stops short of. */
+    private void knob(ComponentPainter p, float w, float d, float h, KnobElement knob, int color) {
+        int value = knob.value();
         p.box(0, 0, 0, w, d, 0.25f, brass, 0xFFFFFFFF, light);
         float r = w / 2;
+        for (int stop : stops(knob)) {
+            p.push();
+            p.translate(r, d / 2, 0);
+            p.rotateZ(KnobElement.angleFor(stop));
+            p.box(-0.15f, -r + 0.05f, 0.25f, 0.15f, -r + 0.45f, 0.3f + LIFT, component, NEEDLE, light);
+            p.pop();
+        }
         for (int tick : new int[] { 0, 15 / 2, 15 }) {
             p.push();
             p.translate(r, d / 2, 0);
@@ -213,10 +223,19 @@ public class PanelBlockEntityRenderer<T extends PanelBlockEntity> implements Blo
         p.pop();
     }
 
-    private void slider(ComponentPainter p, float w, float d, float h, boolean vertical, int value, int color) {
+    /** A limited slider gets a red line across it where the handle stops, at either end it stops short of. */
+    private void slider(ComponentPainter p, float w, float d, float h, SliderElement slider, int color) {
+        boolean vertical = slider.isVertical();
         p.box(0, 0, 0, w, d, 0.25f, iron, 0xFFFFFFFF, light);
-        float f = SliderElement.fractionFor(value);
+        float f = SliderElement.fractionFor(slider.value());
         float m = SliderElement.END_MARGIN;
+        for (float at : slider.stopLines()) {
+            float half = SliderElement.STOP_LINE / 2;
+            if (vertical)
+                p.plate(0, at - half, w, at + half, 0.25f + 2 * LIFT, component, NEEDLE, light);
+            else
+                p.plate(at - half, 0, at + half, d, 0.25f + 2 * LIFT, component, NEEDLE, light);
+        }
         if (vertical) {
             p.plate(w / 2 - 0.2f, m / 2, w / 2 + 0.2f, d - m / 2, 0.25f + LIFT, component, DARK, light);
             float cy = d - m - f * (d - 2 * m);
@@ -228,6 +247,11 @@ public class PanelBlockEntityRenderer<T extends PanelBlockEntity> implements Blo
             p.box(cx - m, 0.15f, 0.25f, cx + m, d - 0.15f, h, component, color, light);
             p.plate(cx - 0.12f, 0.15f, cx + 0.12f, d - 0.15f, h + LIFT, component, DARK, light);
         }
+    }
+
+    /** The limits a knob marks: its lowest and highest value, where they aren't the scale's own ends. */
+    private static int[] stops(AnalogElement element) {
+        return element.stops();
     }
 
     /** A lens set flush into a brass bezel: nothing stands proud of the rim, so it can't pass for a button. */

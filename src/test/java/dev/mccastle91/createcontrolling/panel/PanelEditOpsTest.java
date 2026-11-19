@@ -8,6 +8,7 @@ import dev.mccastle91.createcontrolling.panel.element.NixieStripElement;
 import dev.mccastle91.createcontrolling.panel.element.PanelElement;
 import dev.mccastle91.createcontrolling.panel.element.PanelElements;
 import dev.mccastle91.createcontrolling.panel.element.ReadoutElement;
+import dev.mccastle91.createcontrolling.panel.element.SliderElement;
 import dev.mccastle91.createcontrolling.registry.CCContent;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
@@ -264,6 +265,107 @@ class PanelEditOpsTest {
         assertFalse(knob.click(0, 0, true), "already at min: no change");
         knob.setValue(15);
         assertFalse(knob.click(0, 0, false), "already at max: no change");
+    }
+
+    @Test
+    void analogLimitsMeetButNeverCross() {
+        PanelBlockEntity panel = newPanel();
+        assertTrue(apply(panel, add("slider_h", 1, 1)));
+        SliderElement slider = (SliderElement) panel.getLayout().elements().get(0);
+        assertEquals(0, slider.min());
+        assertEquals(15, slider.max());
+        assertFalse(slider.isLimited());
+
+        assertTrue(apply(panel, option(slider, "min", tag -> tag.putInt("Value", 4))));
+        assertEquals(4, slider.min());
+        assertEquals(4, slider.value(), "the handle is carried up to the new lowest value");
+        assertFalse(apply(panel, option(slider, "min", tag -> tag.putInt("Value", 4))), "already there");
+
+        // lowering the highest value: down to the lowest is fine, below it does nothing
+        assertTrue(apply(panel, option(slider, "max", tag -> tag.putInt("Value", 5))));
+        assertTrue(apply(panel, option(slider, "max", tag -> tag.putInt("Value", 4))));
+        assertFalse(apply(panel, option(slider, "max", tag -> tag.putInt("Value", 3))), "would pass the lowest value");
+        assertEquals(4, slider.max(), "refused outright, not clamped");
+        assertFalse(apply(panel, option(slider, "min", tag -> tag.putInt("Value", 5))), "would pass the highest value");
+        assertEquals(4, slider.min());
+
+        // and neither leaves the 0-15 scale
+        assertTrue(apply(panel, option(slider, "max", tag -> tag.putInt("Value", 15))));
+        assertFalse(apply(panel, option(slider, "max", tag -> tag.putInt("Value", 16))));
+        assertTrue(apply(panel, option(slider, "min", tag -> tag.putInt("Value", 0))));
+        assertFalse(apply(panel, option(slider, "min", tag -> tag.putInt("Value", -1))));
+        assertFalse(slider.isLimited());
+    }
+
+    @Test
+    void limitedControlsStopAtTheirLimitsHoweverTheyAreWorked() {
+        PanelBlockEntity panel = newPanel();
+        assertTrue(apply(panel, add("knob", 1, 1)));
+        KnobElement knob = (KnobElement) panel.getLayout().elements().get(0);
+        assertTrue(apply(panel, option(knob, "min", tag -> tag.putInt("Value", 3))));
+        assertTrue(apply(panel, option(knob, "max", tag -> tag.putInt("Value", 6))));
+        assertEquals(3, knob.value());
+
+        // clicks
+        assertFalse(knob.click(0, 0, true), "sneak-click can't go below the lowest value");
+        for (int i = 0; i < 5; i++)
+            knob.click(0, 0, false);
+        assertEquals(6, knob.value(), "clicks stop at the highest value");
+
+        // sneak-scroll
+        CompoundTag down = op(PanelEditOps.OP_ADJUST, knob.id());
+        down.putInt("Delta", -99);
+        assertTrue(apply(panel, down));
+        assertEquals(3, knob.value());
+
+        // held drag
+        CompoundTag set = op(PanelEditOps.OP_SET_VALUE, knob.id());
+        set.putInt("Value", 15);
+        assertTrue(apply(panel, set));
+        assertEquals(6, knob.value());
+
+        // a computer
+        assertTrue(knob.operate(0));
+        assertEquals(3, knob.value(), "automation stays inside the limits too");
+        assertEquals(3, knob.transmittedStrength());
+
+        // lowering the highest value carries the knob down with it
+        knob.setValue(6);
+        assertTrue(apply(panel, option(knob, "max", tag -> tag.putInt("Value", 4))));
+        assertEquals(4, knob.value());
+
+        PanelLayout loaded = PanelLayout.load(panel.getLayout().save(registries), registries);
+        KnobElement saved = (KnobElement) loaded.elementById(knob.id()).orElseThrow();
+        assertEquals(3, saved.min());
+        assertEquals(4, saved.max());
+        assertEquals(4, saved.value(), "limits and value are saved");
+    }
+
+    @Test
+    void stopLinesMarkWhereALimitedSliderStops() {
+        SliderElement across = PanelElements.SLIDER_H.create(); // 8 px long, 0.75 px end margins
+        assertEquals(0, across.stopLines().length, "no lines on a full-range slider");
+        assertEquals(0, across.stops().length);
+
+        across.setMax(10);
+        assertEquals(1, across.stopLines().length, "only the end that stops short is marked");
+        float reach = SliderElement.END_MARGIN + SliderElement.STOP_LINE / 2;
+        assertEquals(across.handleCentre(10) + reach, across.stopLines()[0], 1e-4f, "just past the handle's right edge");
+
+        across.setMin(5);
+        assertEquals(2, across.stopLines().length);
+        assertEquals(across.handleCentre(5) - reach, across.stopLines()[0], 1e-4f, "just past the handle's left edge");
+        assertTrue(across.stopLines()[0] > 0 && across.stopLines()[1] < across.width(), "both on the slider");
+        assertEquals(2, across.stops().length);
+
+        // a vertical slider's 0 is at its near end, so its low stop is the one further down the face
+        SliderElement upright = PanelElements.SLIDER_V.create();
+        upright.setMin(5);
+        upright.setMax(10);
+        float[] lines = upright.stopLines();
+        assertTrue(lines[0] > lines[1], "low stop nearer the player than the high stop");
+        assertTrue(lines[1] > 0 && lines[0] < upright.depth(), "both on the slider");
+        assertEquals(upright.handleCentre(5) + reach, lines[0], 1e-4f);
     }
 
     @Test

@@ -1,5 +1,6 @@
 package dev.mccastle91.createcontrolling.panel;
 
+import dev.mccastle91.createcontrolling.panel.element.AnalogElement;
 import dev.mccastle91.createcontrolling.panel.element.BarMeterElement;
 import dev.mccastle91.createcontrolling.panel.element.ButtonElement;
 import dev.mccastle91.createcontrolling.panel.element.ColorableElement;
@@ -118,6 +119,11 @@ public final class PanelEditOps {
             return reshapeBar(layout, bar, op.getFloat("Value"), bar.isVertical());
         if (element instanceof BarMeterElement bar && key.equals("vertical"))
             return reshapeBar(layout, bar, bar.length(), op.getBoolean("Value"));
+        // a limit that would pass the other one is refused: nothing changes
+        if (element instanceof AnalogElement analog && key.equals("min"))
+            return analog.setMin(op.getInt("Value"));
+        if (element instanceof AnalogElement analog && key.equals("max"))
+            return analog.setMax(op.getInt("Value"));
         if (element instanceof ReadoutElement readout && key.equals("size"))
             return resizeReadout(layout, readout, op.getInt("Value"));
         return withElement(layout, op, target -> applyOption(target, op));

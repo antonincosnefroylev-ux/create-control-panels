@@ -52,6 +52,9 @@ public class AnalogDragScreen extends Screen {
     private final boolean vertical;
 
     private int value;
+    /** The control's own limits (see AnalogElement): the drag stops where the control does. */
+    private int min;
+    private int max = AnalogElement.MAX_VALUE;
     /** Mouse travel towards the next step, in window pixels. */
     private double travel;
     private double lastX = Double.NaN;
@@ -67,6 +70,8 @@ public class AnalogDragScreen extends Screen {
         this.popup = popup;
         this.vertical = element instanceof SliderElement slider && slider.isVertical();
         this.value = element.value();
+        this.min = element.min();
+        this.max = element.max();
     }
 
     private AnalogElement element() {
@@ -123,23 +128,23 @@ public class AnalogDragScreen extends Screen {
         lastY = y;
 
         double step = stepDistance();
-        while (travel >= step && value < AnalogElement.MAX_VALUE) {
+        while (travel >= step && value < max) {
             travel -= step;
             setValue(value + 1);
         }
-        while (travel <= -step && value > 0) {
+        while (travel <= -step && value > min) {
             travel += step;
             setValue(value - 1);
         }
         // pushing on past either end doesn't bank travel to be undone later
-        if (value == AnalogElement.MAX_VALUE)
+        if (value == max)
             travel = Math.min(travel, 0);
-        if (value == 0)
+        if (value == min)
             travel = Math.max(travel, 0);
     }
 
     private void setValue(int requested) {
-        int clamped = Mth.clamp(requested, 0, AnalogElement.MAX_VALUE);
+        int clamped = Mth.clamp(requested, min, max);
         if (clamped == value)
             return;
         value = clamped;
@@ -180,6 +185,8 @@ public class AnalogDragScreen extends Screen {
         AnalogElement element = element();
         if (element == null)
             return;
+        min = element.min();
+        max = element.max();
         trackMouse();
         if (popup && (changed || ticks >= POPUP_DELAY_TICKS))
             renderDial(graphics, element);
