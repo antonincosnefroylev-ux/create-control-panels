@@ -51,6 +51,9 @@ public class ConsoleBakedModel extends BakedModelWrapper<BakedModel> {
 
     private static final ResourceLocation PLATE = McCompat.id("create_controlling", "block/console_plate");
 
+    /** The layer a bare copycat console's frame draws in, as Create's copycats do. */
+    private static final ChunkRenderTypeSet BARE_COPYCAT = ChunkRenderTypeSet.of(RenderType.cutoutMipped());
+
     /** @param layer the render layer the mesh is for; null for all of it at once (items, plain renderers) */
     private record Key(ConsoleOrientation orientation, ConsoleShape shape, ConsoleCasing casing,
                        ConsoleMesh.Connections connections, @Nullable BlockState material,
@@ -99,9 +102,12 @@ public class ConsoleBakedModel extends BakedModelWrapper<BakedModel> {
     public ChunkRenderTypeSet getRenderTypes(BlockState state, RandomSource rand, ModelData data) {
         ChunkRenderTypeSet own = super.getRenderTypes(state, rand, data);
         BlockState material = data.get(CreatePanelBlockEntity.MATERIAL_PROPERTY);
-        if (material == null)
-            return own;
-        return ChunkRenderTypeSet.union(own, modelOf(material).getRenderTypes(material, rand, ModelData.EMPTY));
+        if (material != null)
+            return ChunkRenderTypeSet.union(own, modelOf(material).getRenderTypes(material, rand, ModelData.EMPTY));
+        ConsoleCasing casing = data.get(CreatePanelBlockEntity.CASING_PROPERTY);
+        if ((casing == null ? defaultCasing : casing) == ConsoleCasing.COPYCAT)
+            return ChunkRenderTypeSet.union(own, BARE_COPYCAT);
+        return own;
     }
 
     @Override
@@ -143,7 +149,16 @@ public class ConsoleBakedModel extends BakedModelWrapper<BakedModel> {
         // the console's own textures are solid; a copied block's go in whichever layers it draws in
         boolean own = key.layer() == null || key.layer() == RenderType.solid();
         BlockState material = key.material();
-        ConsoleMesh.Skin skin = material == null ? null : side -> layers(material, side, key.layer());
+        ConsoleMesh.Skin skin = null;
+        if (material != null) {
+            skin = side -> layers(material, side, key.layer());
+        } else if (key.casing() == ConsoleCasing.COPYCAT) {
+            // bare: Create's copycat frame, cut out so its gaps are open like a copycat's
+            boolean cutout = key.layer() == null || key.layer() == RenderType.cutoutMipped();
+            List<ConsoleMesh.Layer> frame = cutout
+                    ? List.of(new ConsoleMesh.Layer(casingSprite(key.casing()), -1)) : List.of();
+            skin = side -> frame;
+        }
         return ConsoleMesh.build(key.orientation(), key.shape(), key.connections(),
                 casingSprite(key.casing()), connectedTexture(key.casing()), plateSprite(), skin, own);
     }
@@ -160,6 +175,10 @@ public class ConsoleBakedModel extends BakedModelWrapper<BakedModel> {
     public static List<ConsoleMesh.Layer> layers(BlockState material, Direction side, @Nullable RenderType layer) {
         BakedModel model = modelOf(material);
         RandomSource rand = RandomSource.create(42L);
+        // plain models hand out the same quads whatever layer is asked for, so
+        // ask only for the layers the block draws in — or glass comes out solid
+        if (layer != null && !model.getRenderTypes(material, rand, ModelData.EMPTY).contains(layer))
+            return List.of();
         List<ConsoleMesh.Layer> layers = new java.util.ArrayList<>();
         for (BakedQuad quad : model.getQuads(material, side, rand, ModelData.EMPTY, layer))
             layers.add(new ConsoleMesh.Layer(quad.getSprite(), quad.getTintIndex()));

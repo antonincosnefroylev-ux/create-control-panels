@@ -186,6 +186,14 @@ public final class ConsoleMesh {
 
         // centre
         facePlate(plate, 1, top + 1, 15, bottom - 1);
+        // a copycat console's body may be see-through (glass, the bare frame's
+        // gaps): give the face an underside, or it vanishes seen through a wall
+        if (skin != null)
+            quad(plate, face.normal().scale(-1),
+                    face.point(0, top, 0), 0, 0,
+                    face.point(0, bottom, 0), 0, 16,
+                    face.point(16, bottom, 0), 16, 16,
+                    face.point(16, top, 0), 16, 0);
 
         // edges: frame unless an identical neighbour continues the surface. A
         // horizontal frame strip owns its corners, so the vertical ones stop
