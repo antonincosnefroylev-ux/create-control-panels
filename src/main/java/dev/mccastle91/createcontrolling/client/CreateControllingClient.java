@@ -3,6 +3,9 @@ package dev.mccastle91.createcontrolling.client;
 import dev.mccastle91.createcontrolling.client.model.ConsoleBakedModel;
 import dev.mccastle91.createcontrolling.compat.ponder.CCPonderPlugin;
 import dev.mccastle91.createcontrolling.network.CCNetwork;
+import dev.mccastle91.createcontrolling.panel.ConsoleCasing;
+import dev.mccastle91.createcontrolling.panel.PanelBlock;
+import dev.mccastle91.createcontrolling.panel.PanelBlockEntity;
 import dev.mccastle91.createcontrolling.panel.PanelEditOps;
 import dev.mccastle91.createcontrolling.registry.CCContent;
 import net.createmod.ponder.foundation.PonderIndex;
@@ -19,12 +22,14 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.ModelEvent;
+import net.neoforged.neoforge.client.event.RegisterColorHandlersEvent;
 import net.neoforged.neoforge.client.event.RenderHighlightEvent;
 import net.neoforged.neoforge.common.NeoForge;
 //?} else {
 /*import net.minecraftforge.client.event.EntityRenderersEvent;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.ModelEvent;
+import net.minecraftforge.client.event.RegisterColorHandlersEvent;
 import net.minecraftforge.client.event.RenderHighlightEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -43,6 +48,7 @@ public final class CreateControllingClient {
         CCClientHooks.SEND_EDIT = CCNetwork::sendEditToServer;
         modEventBus.addListener(CreateControllingClient::registerRenderers);
         modEventBus.addListener(CreateControllingClient::swapConsoleModels);
+        modEventBus.addListener(CreateControllingClient::registerBlockColors);
         //? if neoforge {
         NeoForge.EVENT_BUS.addListener(CreateControllingClient::onMouseScroll);
         NeoForge.EVENT_BUS.addListener(AnalogDrag::onUseKey);
@@ -67,7 +73,12 @@ public final class CreateControllingClient {
     private static void swapConsoleModels(ModelEvent.ModifyBakingResult event) {
         @SuppressWarnings({ "unchecked", "rawtypes" })
         Map<Object, BakedModel> models = (Map) event.getModels();
-        Block block = CCContent.CONTROL_PANEL.get();
+        swapModelsOf(models, CCContent.CONTROL_PANEL.get());
+        swapModelsOf(models, CCContent.COPYCAT_CONTROL_PANEL.get());
+    }
+
+    private static void swapModelsOf(Map<Object, BakedModel> models, PanelBlock block) {
+        ConsoleCasing casing = block.fixedCasing() == null ? ConsoleCasing.DEFAULT : block.fixedCasing();
         BakedModel original = null;
         ConsoleBakedModel console = null;
         for (BlockState state : block.getStateDefinition().getPossibleStates()) {
@@ -78,14 +89,24 @@ public final class CreateControllingClient {
             if (model != original) {
                 // all states share one JSON model, so one generator (and one cache)
                 original = model;
-                console = new ConsoleBakedModel(model);
+                console = new ConsoleBakedModel(model, casing);
             }
             models.put(location, console);
         }
         ModelResourceLocation item = new ModelResourceLocation(BuiltInRegistries.ITEM.getKey(block.asItem()), "inventory");
         BakedModel itemModel = models.get(item);
         if (itemModel != null)
-            models.put(item, new ConsoleBakedModel(itemModel));
+            models.put(item, new ConsoleBakedModel(itemModel, casing));
+    }
+
+    /** A copycat console is tinted as the block it copies is (grass, leaves, water). */
+    private static void registerBlockColors(RegisterColorHandlersEvent.Block event) {
+        event.register((state, level, pos, tintIndex) -> {
+            if (level != null && pos != null && level.getBlockEntity(pos) instanceof PanelBlockEntity panel
+                    && panel.material() != null)
+                return Minecraft.getInstance().getBlockColors().getColor(panel.material(), level, pos, tintIndex);
+            return -1;
+        }, CCContent.COPYCAT_CONTROL_PANEL.get());
     }
 
     /** Consoles draw their own highlight: the aimed component, or the wedge. */

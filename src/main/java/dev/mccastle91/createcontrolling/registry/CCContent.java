@@ -8,6 +8,7 @@ import com.tterrag.registrate.util.entry.BlockEntry;
 import com.tterrag.registrate.util.entry.ItemEntry;
 import dev.mccastle91.createcontrolling.CreateControlling;
 import dev.mccastle91.createcontrolling.compat.create.ConsoleDisplayTarget;
+import dev.mccastle91.createcontrolling.compat.create.CopycatConsoleBlock;
 import dev.mccastle91.createcontrolling.compat.create.WrenchablePanelBlock;
 import dev.mccastle91.createcontrolling.item.PanelBlueprintItem;
 import dev.mccastle91.createcontrolling.panel.CCTypes;
@@ -37,13 +38,23 @@ public final class CCContent {
             .simpleItem()
             .register();
 
+    /** A console that takes the look of a block applied to it; everything else is the same console. */
+    public static final BlockEntry<CopycatConsoleBlock> COPYCAT_CONTROL_PANEL = REGISTRATE
+            .block("copycat_control_panel", CopycatConsoleBlock::new)
+            .properties(p -> p.mapColor(MapColor.GLOW_LICHEN)
+                    .strength(1.5f)
+                    .sound(SoundType.NETHERITE_BLOCK)
+                    .noOcclusion())
+            .simpleItem()
+            .register();
+
     public static final ItemEntry<PanelBlueprintItem> PANEL_BLUEPRINT = REGISTRATE
             .item("panel_blueprint", PanelBlueprintItem::new)
             .register();
 
     public static final BlockEntityEntry<CreatePanelBlockEntity> CONTROL_PANEL_ENTITY = REGISTRATE
             .blockEntity("control_panel", CreatePanelBlockEntity::new)
-            .validBlocks(CONTROL_PANEL)
+            .validBlocks(CONTROL_PANEL, COPYCAT_CONTROL_PANEL)
             .register();
 
     public static final Supplier<ConsoleDisplayTarget> CONSOLE_DISPLAY_TARGET = REGISTRATE
@@ -60,5 +71,6 @@ public final class CCContent {
     /** Once registries are frozen: makes consoles something a Display Link can target. */
     public static void commonSetup() {
         DisplayTarget.BY_BLOCK.register(CONTROL_PANEL.get(), CONSOLE_DISPLAY_TARGET.get());
+        DisplayTarget.BY_BLOCK.register(COPYCAT_CONTROL_PANEL.get(), CONSOLE_DISPLAY_TARGET.get());
     }
 }

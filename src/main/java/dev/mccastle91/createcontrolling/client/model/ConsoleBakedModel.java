@@ -20,10 +20,12 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.AttachFace;
 import org.jetbrains.annotations.Nullable;
 //? if neoforge {
+import net.neoforged.neoforge.client.ChunkRenderTypeSet;
 import net.neoforged.neoforge.client.model.BakedModelWrapper;
 import net.neoforged.neoforge.client.model.data.ModelData;
 //?} else {
-/*import net.minecraftforge.client.model.BakedModelWrapper;
+/*import net.minecraftforge.client.ChunkRenderTypeSet;
+import net.minecraftforge.client.model.BakedModelWrapper;
 import net.minecraftforge.client.model.data.ModelData;
 *///?}
 
@@ -38,21 +40,32 @@ import java.util.concurrent.ConcurrentHashMap;
  * type. Shape and casing come from the block entity as model data, edge
  * connections from the blockstate. Meshes are cached per distinct console —
  * in practice a handful of keys.
+ *
+ * A copycat console's body wears the textures of the block it copies (see
+ * {@link ConsoleMesh.Skin}): one sprite and tint per layer of each of that
+ * block's faces, stretched over the wedge. That block may draw in another
+ * render layer than the console's own solid one (glass, leaves), so the
+ * console then draws in both, and each layer gets a mesh of its own.
  */
 public class ConsoleBakedModel extends BakedModelWrapper<BakedModel> {
 
     private static final ResourceLocation PLATE = McCompat.id("create_controlling", "block/console_plate");
 
+    /** @param layer the render layer the mesh is for; null for all of it at once (items, plain renderers) */
     private record Key(ConsoleOrientation orientation, ConsoleShape shape, ConsoleCasing casing,
-                       ConsoleMesh.Connections connections) {
+                       ConsoleMesh.Connections connections, @Nullable BlockState material,
+                       @Nullable RenderType layer) {
     }
 
     private final Map<Key, ConsoleMesh.Mesh> cache = new ConcurrentHashMap<>();
     private final Map<ConsoleCasing, TextureAtlasSprite> casingSprites = new EnumMap<>(ConsoleCasing.class);
     private TextureAtlasSprite plateSprite;
+    /** The casing of this model's block before its block entity says otherwise, and of its item. */
+    private final ConsoleCasing defaultCasing;
 
-    public ConsoleBakedModel(BakedModel original) {
+    public ConsoleBakedModel(BakedModel original, ConsoleCasing defaultCasing) {
         super(original);
+        this.defaultCasing = defaultCasing;
     }
 
     @Override
@@ -63,7 +76,7 @@ public class ConsoleBakedModel extends BakedModelWrapper<BakedModel> {
     @Override
     public List<BakedQuad> getQuads(@Nullable BlockState state, @Nullable Direction side, RandomSource rand,
                                     ModelData data, @Nullable RenderType renderType) {
-        ConsoleMesh.Mesh mesh = cache.computeIfAbsent(keyFor(state, data), this::build);
+        ConsoleMesh.Mesh mesh = cache.computeIfAbsent(keyFor(state, data, renderType), this::build);
         if (side == null)
             return mesh.quads();
         return side == mesh.bottomSide() ? mesh.bottom() : List.of();
@@ -82,6 +95,21 @@ public class ConsoleBakedModel extends BakedModelWrapper<BakedModel> {
         return data;
     }
 
+    @Override
+    public ChunkRenderTypeSet getRenderTypes(BlockState state, RandomSource rand, ModelData data) {
+        ChunkRenderTypeSet own = super.getRenderTypes(state, rand, data);
+        BlockState material = data.get(CreatePanelBlockEntity.MATERIAL_PROPERTY);
+        if (material == null)
+            return own;
+        return ChunkRenderTypeSet.union(own, modelOf(material).getRenderTypes(material, rand, ModelData.EMPTY));
+    }
+
+    @Override
+    public TextureAtlasSprite getParticleIcon(ModelData data) {
+        BlockState material = data.get(CreatePanelBlockEntity.MATERIAL_PROPERTY);
+        return material == null ? super.getParticleIcon(data) : modelOf(material).getParticleIcon(ModelData.EMPTY);
+    }
+
     // Item rendering swaps in whatever model these return. The wrapper's
     // defaults delegate to the placeholder JSON model, which answers with
     // itself — and it has no quads, so the item would be invisible.
@@ -98,22 +126,53 @@ public class ConsoleBakedModel extends BakedModelWrapper<BakedModel> {
         return List.of(this);
     }
 
-    private static Key keyFor(@Nullable BlockState state, ModelData data) {
+    private Key keyFor(@Nullable BlockState state, ModelData data, @Nullable RenderType layer) {
         if (state == null) // item
             return new Key(ConsoleOrientation.of(AttachFace.FLOOR, Direction.NORTH), ConsoleShape.DEFAULT,
-                    ConsoleCasing.DEFAULT, ConsoleMesh.Connections.NONE);
+                    defaultCasing, ConsoleMesh.Connections.NONE, null, null);
         ConsoleShape shape = data.get(CreatePanelBlockEntity.SHAPE_PROPERTY);
         ConsoleCasing casing = data.get(CreatePanelBlockEntity.CASING_PROPERTY);
         if (shape == null)
             shape = ConsoleShape.defaultFor(
                     state.getValue(net.minecraft.world.level.block.FaceAttachedHorizontalDirectionalBlock.FACE));
-        return new Key(ConsoleOrientation.of(state), shape, casing == null ? ConsoleCasing.DEFAULT : casing,
-                ConsoleMesh.Connections.of(state));
+        return new Key(ConsoleOrientation.of(state), shape, casing == null ? defaultCasing : casing,
+                ConsoleMesh.Connections.of(state), data.get(CreatePanelBlockEntity.MATERIAL_PROPERTY), layer);
     }
 
     private ConsoleMesh.Mesh build(Key key) {
+        // the console's own textures are solid; a copied block's go in whichever layers it draws in
+        boolean own = key.layer() == null || key.layer() == RenderType.solid();
+        BlockState material = key.material();
+        ConsoleMesh.Skin skin = material == null ? null : side -> layers(material, side, key.layer());
         return ConsoleMesh.build(key.orientation(), key.shape(), key.connections(),
-                casingSprite(key.casing()), connectedTexture(key.casing()), plateSprite());
+                casingSprite(key.casing()), connectedTexture(key.casing()), plateSprite(), skin, own);
+    }
+
+    private static BakedModel modelOf(BlockState material) {
+        return Minecraft.getInstance().getBlockRenderer().getBlockModel(material);
+    }
+
+    /**
+     * What a block shows on one side in one render layer: the sprite and tint
+     * of each quad its model has there. A model with nothing on that side
+     * (not a plain cube) lends its particle texture, in its first layer only.
+     */
+    public static List<ConsoleMesh.Layer> layers(BlockState material, Direction side, @Nullable RenderType layer) {
+        BakedModel model = modelOf(material);
+        RandomSource rand = RandomSource.create(42L);
+        List<ConsoleMesh.Layer> layers = new java.util.ArrayList<>();
+        for (BakedQuad quad : model.getQuads(material, side, rand, ModelData.EMPTY, layer))
+            layers.add(new ConsoleMesh.Layer(quad.getSprite(), quad.getTintIndex()));
+        if (layers.isEmpty())
+            for (BakedQuad quad : model.getQuads(material, null, rand, ModelData.EMPTY, layer))
+                if (quad.getDirection() == side)
+                    layers.add(new ConsoleMesh.Layer(quad.getSprite(), quad.getTintIndex()));
+        if (layers.isEmpty()) {
+            List<RenderType> types = model.getRenderTypes(material, rand, ModelData.EMPTY).asList();
+            if (layer == null || !types.isEmpty() && types.get(0) == layer)
+                layers.add(new ConsoleMesh.Layer(model.getParticleIcon(ModelData.EMPTY), -1));
+        }
+        return layers;
     }
 
     /** Create's connected-texture sheet for a casing, if it has one. */

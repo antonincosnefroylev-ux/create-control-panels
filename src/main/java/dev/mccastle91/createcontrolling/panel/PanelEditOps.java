@@ -41,6 +41,9 @@ public final class PanelEditOps {
     /** The console's own name, which computers can find it by. */
     public static final String OP_SET_NAME = "set_name";
 
+    /** A copycat console gives its copied block back and goes bare again. */
+    public static final String OP_CLEAR_MATERIAL = "clear_material";
+
     private PanelEditOps() {
     }
 
@@ -57,6 +60,15 @@ public final class PanelEditOps {
         // nor is a name: it saves and syncs on its own
         if (OP_SET_NAME.equals(op.getString(KEY_OP)))
             return panel.setName(op.getString("Name"));
+        // nor is the copied block
+        if (OP_CLEAR_MATERIAL.equals(op.getString(KEY_OP))) {
+            if (panel.material() == null)
+                return false;
+            ItemStack returned = panel.clearMaterial();
+            if (!returned.isEmpty())
+                payer.refund(List.of(returned));
+            return true;
+        }
         PanelLayout layout = panel.getLayout();
         boolean changed = switch (op.getString(KEY_OP)) {
             case OP_ADD -> add(layout, op, payer);

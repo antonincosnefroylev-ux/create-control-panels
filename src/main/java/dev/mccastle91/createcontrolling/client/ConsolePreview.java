@@ -10,7 +10,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.block.BlockRenderDispatcher;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
@@ -80,7 +79,7 @@ public final class ConsolePreview {
             BakedModel model = blocks.getBlockModel(whole);
             ModelData data = panel instanceof CreatePanelBlockEntity console ? console.getModelData() : ModelData.EMPTY;
             blocks.getModelRenderer().renderModel(pose.last(), buffers.getBuffer(Sheets.cutoutBlockSheet()), whole, model,
-                    1f, 1f, 1f, LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, data, RenderType.cutout());
+                    1f, 1f, 1f, LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, data, null);
 
             BlockEntityRenderer<BlockEntity> parts = minecraft.getBlockEntityRenderDispatcher().getRenderer(panel);
             if (parts != null)

@@ -1,6 +1,7 @@
 {
   "itemGroup.create_controlling.base": "Create Controlling",
   "block.create_controlling.control_panel": "Control Console",
+  "block.create_controlling.copycat_control_panel": "Copycat Control Console",
   "item.create_controlling.panel_blueprint": "Console Blueprint",
   "message.create_controlling.blueprint_copied": "Console design copied (%s components)",
   "message.create_controlling.blueprint_pasted": "Console design pasted (%s components)",
@@ -55,6 +56,8 @@
   "gui.create_controlling.color": "Color",
   "gui.create_controlling.apply": "Set Text",
   "gui.create_controlling.console_name": "Console Name",
+  "gui.create_controlling.clear_material": "Take Block",
+  "gui.create_controlling.clear_material.tooltip": "Takes the copied block off the console and hands it back",
   "gui.create_controlling.set_name": "Set Name",
   "gui.create_controlling.set_name.tooltip": "Computers (CC: Tweaked) can pick this console out of a joined group by its name. Enter also sets it.",
   "gui.create_controlling.align": "Align",

@@ -38,6 +38,8 @@ public class PanelBlockEntity extends BlockEntity {
     public static final String TAG_LAYOUT = "Layout";
     public static final String TAG_SHAPE = "Shape";
     public static final String TAG_CASING = "Casing";
+    public static final String TAG_MATERIAL = "Material";
+    public static final String TAG_MATERIAL_ITEM = "MaterialItem";
     public static final String TAG_RUNTIME = "Runtime";
     public static final String TAG_RUNTIME_ID = "Id";
     public static final String TAG_RUNTIME_STRENGTH = "S";
@@ -52,6 +54,11 @@ public class PanelBlockEntity extends BlockEntity {
     private String name = "";
     private ConsoleShape shape = ConsoleShape.DEFAULT;
     private ConsoleCasing casing = ConsoleCasing.DEFAULT;
+    /** The block a copycat console looks like, or null: only the copycat console block sets one. */
+    @org.jetbrains.annotations.Nullable
+    private BlockState material;
+    /** The item that block was applied with; it comes back when the block is swapped or removed. */
+    private net.minecraft.world.item.ItemStack materialItem = net.minecraft.world.item.ItemStack.EMPTY;
 
     /** Live network connections, one per linkable element; server only. */
     private final Map<UUID, LinkPort> linkPorts = new HashMap<>();
@@ -62,6 +69,14 @@ public class PanelBlockEntity extends BlockEntity {
     public PanelBlockEntity(BlockEntityType<? extends PanelBlockEntity> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
         shape = ConsoleShape.defaultFor(attachFace(state));
+        ConsoleCasing fixed = fixedCasing();
+        if (fixed != null)
+            casing = fixed;
+    }
+
+    @org.jetbrains.annotations.Nullable
+    private ConsoleCasing fixedCasing() {
+        return getBlockState().getBlock() instanceof PanelBlock block ? block.fixedCasing() : null;
     }
 
     private static AttachFace attachFace(BlockState state) {
@@ -131,6 +146,51 @@ public class PanelBlockEntity extends BlockEntity {
 
     public void setCasing(ConsoleCasing casing) {
         this.casing = casing;
+        setChanged();
+        syncToClients();
+        refreshNeighbourConnections();
+    }
+
+    /** The block this console looks like, or null if it wears its casing. */
+    @org.jetbrains.annotations.Nullable
+    public BlockState material() {
+        return material;
+    }
+
+    /** The item the copied block was applied with; empty if there is none. */
+    public net.minecraft.world.item.ItemStack materialItem() {
+        return materialItem;
+    }
+
+    /**
+     * Makes the console look like {@code material}, keeping {@code item} (one
+     * of it) to hand back later. Returns the item kept for the block before, which
+     * the caller owes the player.
+     */
+    public net.minecraft.world.item.ItemStack setMaterial(BlockState material, net.minecraft.world.item.ItemStack item) {
+        net.minecraft.world.item.ItemStack previous = materialItem;
+        this.material = material;
+        this.materialItem = item.copyWithCount(1);
+        materialChanged();
+        return previous;
+    }
+
+    /** Turns the copied block to another of its states (the axis of a log); the item stays. */
+    public void turnMaterial(BlockState material) {
+        this.material = material;
+        materialChanged();
+    }
+
+    /** Back to the bare console. Returns the item kept for the block, which the caller owes the player. */
+    public net.minecraft.world.item.ItemStack clearMaterial() {
+        net.minecraft.world.item.ItemStack previous = materialItem;
+        material = null;
+        materialItem = net.minecraft.world.item.ItemStack.EMPTY;
+        materialChanged();
+        return previous;
+    }
+
+    private void materialChanged() {
         setChanged();
         syncToClients();
         refreshNeighbourConnections();
@@ -539,15 +599,39 @@ public class PanelBlockEntity extends BlockEntity {
         tag.putString(TAG_CASING, casing.id());
         if (!name.isEmpty())
             tag.putString(TAG_NAME, name);
+        if (material != null) {
+            tag.put(TAG_MATERIAL, net.minecraft.nbt.NbtUtils.writeBlockState(material));
+            if (!materialItem.isEmpty())
+                tag.put(TAG_MATERIAL_ITEM, McCompat.saveStack(materialItem, registries));
+        }
     }
 
     private void readData(CompoundTag tag, HolderLookup.Provider registries) {
         ConsoleShape previousShape = shape;
         ConsoleCasing previousCasing = casing;
+        BlockState previousMaterial = material;
         if (tag.contains(TAG_SHAPE))
             shape = ConsoleShape.load(tag.getCompound(TAG_SHAPE)).forFace(attachFace(getBlockState()));
         if (tag.contains(TAG_CASING))
             casing = ConsoleCasing.byId(tag.getString(TAG_CASING));
+        // a block with a casing of its own keeps it, and no other block may wear that one
+        ConsoleCasing fixed = fixedCasing();
+        if (fixed != null)
+            casing = fixed;
+        else if (casing == ConsoleCasing.COPYCAT)
+            casing = ConsoleCasing.DEFAULT;
+        // every full save and update tag carries the copied block when there is one
+        material = null;
+        materialItem = net.minecraft.world.item.ItemStack.EMPTY;
+        if (fixed == ConsoleCasing.COPYCAT && tag.contains(TAG_MATERIAL)) {
+            BlockState read = net.minecraft.nbt.NbtUtils.readBlockState(
+                    net.minecraft.core.registries.BuiltInRegistries.BLOCK.asLookup(), tag.getCompound(TAG_MATERIAL));
+            if (!read.isAir()) {
+                material = read;
+                if (tag.contains(TAG_MATERIAL_ITEM))
+                    materialItem = McCompat.loadStack(tag.getCompound(TAG_MATERIAL_ITEM), registries);
+            }
+        }
         if (tag.contains(TAG_LAYOUT))
             layout = PanelLayout.load(tag.getCompound(TAG_LAYOUT), registries);
         // every full save and update tag carries the name when there is one
@@ -559,7 +643,8 @@ public class PanelBlockEntity extends BlockEntity {
             // now see this console's real shape and casing
             rebuildLinkPorts();
             refreshNeighbourConnections();
-        } else if (level != null && (!shape.equals(previousShape) || casing != previousCasing)) {
+        } else if (level != null && (!shape.equals(previousShape) || casing != previousCasing
+                || material != previousMaterial)) {
             // The body is generated from this data: refresh it and re-mesh
             requestModelDataUpdate();
             level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 8);
