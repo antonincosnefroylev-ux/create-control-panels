@@ -31,6 +31,7 @@ public class CreatePanelBlockEntity extends PanelBlockEntity implements IHaveGog
     /** Model data the console body is generated from (see ConsoleBakedModel). */
     public static final ModelProperty<ConsoleShape> SHAPE_PROPERTY = new ModelProperty<>();
     public static final ModelProperty<ConsoleCasing> CASING_PROPERTY = new ModelProperty<>();
+    public static final ModelProperty<BlockState> MATERIAL_PROPERTY = new ModelProperty<>();
 
     private static final int MAX_GOGGLE_LINES = 8;
     /**
@@ -49,6 +50,7 @@ public class CreatePanelBlockEntity extends PanelBlockEntity implements IHaveGog
         return ModelData.builder()
                 .with(SHAPE_PROPERTY, shape())
                 .with(CASING_PROPERTY, casing())
+                .with(MATERIAL_PROPERTY, material())
                 .build();
     }
 

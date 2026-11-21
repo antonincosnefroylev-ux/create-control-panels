@@ -604,6 +604,146 @@ public class PanelLinkGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * The copycat console: a block applied to it becomes its look and is kept
+     * to hand back; the same block again turns it, another swaps it, and the
+     * designer's op takes it off. An ordinary console takes no block.
+     */
+    @GameTest(template = EMPTY)
+    public void copycatConsoleCopiesBlocks(GameTestHelper helper) {
+        floor(helper);
+        PanelBlockEntity panel = placeCopycat(helper, PANEL_POS);
+        if (panel.casing() != dev.mccastle91.createcontrolling.panel.ConsoleCasing.COPYCAT || panel.material() != null)
+            throw new GameTestAssertException("A new copycat console should be bare, in its own casing");
+        //? if >=1.21 {
+        var player = helper.makeMockPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        //?} else {
+        /*var player = helper.makeMockPlayer();
+        *///?}
+
+        use(helper, player, PANEL_POS, new ItemStack(Items.OAK_LOG, 2));
+        BlockState log = panel.material();
+        if (log == null || !log.is(Blocks.OAK_LOG) || !panel.materialItem().is(Items.OAK_LOG))
+            throw new GameTestAssertException("Copycat console did not take the log: " + log);
+        //? if >=1.21 {
+        if (player.getMainHandItem().getCount() != 1)
+            throw new GameTestAssertException("Applying a block should use one up");
+        //?}
+        use(helper, player, PANEL_POS, player.getMainHandItem());
+        if (panel.material() == log || !panel.material().is(Blocks.OAK_LOG))
+            throw new GameTestAssertException("The same block again should turn the log");
+
+        use(helper, player, PANEL_POS, new ItemStack(Items.STONE));
+        if (!panel.material().is(Blocks.STONE))
+            throw new GameTestAssertException("Another block should replace the log");
+        //? if >=1.21 {
+        if (!player.getInventory().hasAnyMatching(stack -> stack.is(Items.OAK_LOG)))
+            throw new GameTestAssertException("The replaced log should come back");
+        //?}
+
+        // things that aren't whole blocks are refused, as Create's copycats refuse them
+        use(helper, player, PANEL_POS, new ItemStack(Items.OAK_STAIRS));
+        use(helper, player, PANEL_POS, new ItemStack(Items.CHEST));
+        if (!panel.material().is(Blocks.STONE))
+            throw new GameTestAssertException("Stairs or a chest should not be copied");
+
+        // an ordinary console copies nothing
+        BlockPos plainPos = PANEL_POS.offset(0, 0, 3);
+        PanelBlockEntity plain = placeConsole(helper, plainPos);
+        use(helper, player, plainPos, new ItemStack(Items.STONE));
+        if (plain.material() != null)
+            throw new GameTestAssertException("An ordinary console took a block");
+
+        // the block travels with the console item
+        BlockPos abs = helper.absolutePos(PANEL_POS);
+        ItemStack dropped = ItemStack.EMPTY;
+        for (ItemStack drop : net.minecraft.world.level.block.Block.getDrops(helper.getBlockState(PANEL_POS),
+                helper.getLevel(), abs, helper.getBlockEntity(PANEL_POS)))
+            if (drop.is(CCContent.COPYCAT_CONTROL_PANEL.get().asItem()))
+                dropped = drop;
+        if (dropped.isEmpty())
+            throw new GameTestAssertException("A copycat console should drop as its own item");
+        helper.setBlock(PANEL_POS, Blocks.AIR.defaultBlockState());
+        PanelBlockEntity restored = placeCopycat(helper, PANEL_POS);
+        net.minecraft.world.item.BlockItem.updateCustomBlockEntityTag(helper.getLevel(), player, abs, dropped);
+        if (restored.material() == null || !restored.material().is(Blocks.STONE)
+                || !restored.materialItem().is(Items.STONE))
+            throw new GameTestAssertException("The console item lost its copied block");
+
+        // the designer takes it off and hands it back
+        CompoundTag clear = new CompoundTag();
+        clear.putString(PanelEditOps.KEY_OP, PanelEditOps.OP_CLEAR_MATERIAL);
+        player.getInventory().clearContent();
+        if (!PanelEditOps.apply(restored, clear, helper.getLevel().registryAccess(), CostPayer.of(player))
+                || restored.material() != null)
+            throw new GameTestAssertException("Taking the block off left it on");
+        //? if >=1.21 {
+        if (!player.getInventory().hasAnyMatching(stack -> stack.is(Items.STONE)))
+            throw new GameTestAssertException("Taking the block off should hand it back");
+        //?}
+        if (PanelEditOps.apply(restored, clear, helper.getLevel().registryAccess(), CostPayer.of(player)))
+            throw new GameTestAssertException("A bare console has no block to take off");
+        helper.succeed();
+    }
+
+    /** Copycat consoles join each other only while they copy the same block, and never an ordinary console. */
+    @GameTest(template = EMPTY)
+    public void copycatConsolesJoinBySameBlock(GameTestHelper helper) {
+        floor(helper);
+        BlockPos next = PANEL_POS.east();
+        PanelBlockEntity a = placeCopycat(helper, PANEL_POS);
+        PanelBlockEntity b = placeCopycat(helper, next);
+        placeConsole(helper, PANEL_POS.west());
+        assertJoined(helper, PANEL_POS, 1, "two bare copycat consoles, but not the ordinary one");
+
+        a.setMaterial(Blocks.STONE.defaultBlockState(), new ItemStack(Items.STONE));
+        assertJoined(helper, PANEL_POS, 0, "stone beside bare");
+        b.setMaterial(Blocks.STONE.defaultBlockState(), new ItemStack(Items.STONE));
+        assertJoined(helper, PANEL_POS, 1, "stone beside stone");
+        b.setMaterial(Blocks.DIRT.defaultBlockState(), new ItemStack(Items.DIRT));
+        assertJoined(helper, PANEL_POS, 0, "stone beside dirt");
+        helper.succeed();
+    }
+
+    private static void assertJoined(GameTestHelper helper, BlockPos pos, int expected, String what) {
+        BlockState state = helper.getBlockState(pos);
+        int joined = 0;
+        for (var edge : List.of(PanelBlock.CONNECT_N, PanelBlock.CONNECT_S, PanelBlock.CONNECT_W, PanelBlock.CONNECT_E))
+            if (state.getValue(edge))
+                joined++;
+        if (joined != expected)
+            throw new GameTestAssertException("Expected " + expected + " joined edge(s) for " + what + ", got " + joined);
+    }
+
+    private static void floor(GameTestHelper helper) {
+        for (int x = 0; x < 7; x++)
+            for (int z = 0; z < 7; z++)
+                helper.setBlock(new BlockPos(x, 0, z), Blocks.STONE.defaultBlockState());
+    }
+
+    private static PanelBlockEntity placeCopycat(GameTestHelper helper, BlockPos pos) {
+        helper.setBlock(pos, CCContent.COPYCAT_CONTROL_PANEL.getDefaultState()
+                .setValue(FaceAttachedHorizontalDirectionalBlock.FACE, AttachFace.FLOOR));
+        if (!(helper.getBlockEntity(pos) instanceof PanelBlockEntity panel))
+            throw new GameTestAssertException("Panel block entity missing at " + pos);
+        return panel;
+    }
+
+    /** A right-click on the top of the block at {@code pos} with {@code stack} in the main hand. */
+    private static void use(GameTestHelper helper, net.minecraft.world.entity.player.Player player, BlockPos pos,
+                            ItemStack stack) {
+        var hand = net.minecraft.world.InteractionHand.MAIN_HAND;
+        player.setItemInHand(hand, stack);
+        BlockPos abs = helper.absolutePos(pos);
+        var hit = new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(abs), Direction.UP, abs, false);
+        BlockState state = helper.getBlockState(pos);
+        //? if >=1.21 {
+        state.useItemOn(stack, helper.getLevel(), player, hand, hit);
+        //?} else {
+        /*state.use(helper.getLevel(), player, hand, hit);
+        *///?}
+    }
+
     private static FrequencyPair freq(ItemLike first, ItemLike second) {
         return FrequencyPair.of(new ItemStack(first), new ItemStack(second));
     }

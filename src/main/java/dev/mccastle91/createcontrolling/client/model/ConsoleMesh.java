@@ -28,6 +28,10 @@ import java.util.List;
  * the casing has Create connected textures, the outer walls of joined
  * consoles use them too, so a row's back reads as one casing.
  *
+ * A copycat console swaps the casing texture for a {@link Skin}: the textures
+ * of the block it copies, each wedge face taking those of the world side it
+ * points to. The plate stays the plate.
+ *
  * Quads are packed directly in the vanilla BLOCK vertex layout, which is the
  * same on 1.20.1 and 1.21.1, and lit by the normal chunk pipeline.
  */
@@ -59,6 +63,15 @@ public final class ConsoleMesh {
     public record Mesh(List<BakedQuad> quads, Direction bottomSide, List<BakedQuad> bottom) {
     }
 
+    /** One texture layer of a copied block's face (grass has two on its sides), with its tint index. */
+    public record Layer(TextureAtlasSprite sprite, int tintIndex) {
+    }
+
+    /** What a copied block shows on each side of the world, bottom layer first. */
+    public interface Skin {
+        List<Layer> layers(Direction worldSide);
+    }
+
     private final ConsoleOrientation orientation;
     private final PanelFaceGeometry face;
     private final List<BakedQuad> quads = new ArrayList<>();
@@ -70,6 +83,15 @@ public final class ConsoleMesh {
     private CTSpriteShiftEntry ct;
     /** The face's extent down the slope, design px; texture v along it is spread over 0–16. */
     private float plateTop = 0, plateBottom = 16;
+    /** The copied block's textures, drawn wherever the casing's would be; null for a console in its casing. */
+    @Nullable
+    private Skin skin;
+    /** Whether the console's own textures (plate, casing) are drawn; false leaves only the skin's. */
+    private boolean ownTextures = true;
+    private TextureAtlasSprite plateSprite;
+    /** The world side whose skin the quads being emitted take, or null for the one each faces. */
+    @Nullable
+    private Direction skinSide;
 
     private ConsoleMesh(ConsoleOrientation orientation, ConsoleShape shape) {
         this.orientation = orientation;
@@ -79,9 +101,25 @@ public final class ConsoleMesh {
     public static Mesh build(ConsoleOrientation orientation, ConsoleShape shape, Connections c,
                              TextureAtlasSprite casing, @Nullable CTSpriteShiftEntry casingCt,
                              TextureAtlasSprite plate) {
+        return build(orientation, shape, c, casing, casingCt, plate, null, true);
+    }
+
+    /**
+     * @param skin        the copied block's textures in place of the casing's, or null
+     * @param ownTextures false to leave out everything but the skin: the pass for a
+     *                    render layer only the copied block draws in
+     */
+    public static Mesh build(ConsoleOrientation orientation, ConsoleShape shape, Connections c,
+                             TextureAtlasSprite casing, @Nullable CTSpriteShiftEntry casingCt,
+                             TextureAtlasSprite plate, @Nullable Skin skin, boolean ownTextures) {
         ConsoleMesh mesh = new ConsoleMesh(orientation, shape);
-        mesh.ct = casingCt;
+        mesh.ct = skin == null ? casingCt : null;
+        mesh.skin = skin;
+        mesh.ownTextures = ownTextures;
+        mesh.plateSprite = plate;
         mesh.body(shape, c, casing);
+        // the sloped face is the block's top, however steep
+        mesh.skinSide = orientation.rotate(Direction.UP);
         mesh.face(shape, c, casing, plate);
         return new Mesh(List.copyOf(mesh.quads), orientation.rotate(Direction.DOWN), List.copyOf(mesh.bottom));
     }
@@ -148,6 +186,14 @@ public final class ConsoleMesh {
 
         // centre
         facePlate(plate, 1, top + 1, 15, bottom - 1);
+        // a copycat console's body may be see-through (glass, the bare frame's
+        // gaps): give the face an underside, or it vanishes seen through a wall
+        if (skin != null)
+            quad(plate, face.normal().scale(-1),
+                    face.point(0, top, 0), 0, 0,
+                    face.point(0, bottom, 0), 0, 16,
+                    face.point(16, bottom, 0), 16, 16,
+                    face.point(16, top, 0), 16, 0);
 
         // edges: frame unless an identical neighbour continues the surface. A
         // horizontal frame strip owns its corners, so the vertical ones stop
@@ -213,21 +259,12 @@ public final class ConsoleMesh {
     private void quad(TextureAtlasSprite sprite, Vec3 modelNormal,
                       Vec3 a, float ua, float va, Vec3 b, float ub, float vb,
                       Vec3 c, float uc, float vc, Vec3 d, float ud, float vd) {
+        boolean skinned = skin != null && sprite != plateSprite;
+        if (!skinned && !ownTextures)
+            return;
         Vec3[] pos = { orientation.apply(a), orientation.apply(b), orientation.apply(c), orientation.apply(d) };
         float[] u = { ua, ub, uc, ud };
         float[] v = { va, vb, vc, vd };
-        // texture px to atlas uv; connected walls are redirected into the casing's CT sheet
-        boolean connected = ct != null && ctIndex >= 0 && sprite == ct.getOriginal();
-        for (int i = 0; i < 4; i++) {
-            u[i] = ClientCompat.spriteU(sprite, u[i]);
-            v[i] = ClientCompat.spriteV(sprite, v[i]);
-            if (connected) {
-                u[i] = ct.getTargetU(u[i], ctIndex);
-                v[i] = ct.getTargetV(v[i], ctIndex);
-            }
-        }
-        if (connected)
-            sprite = ct.getTarget();
         Vec3 normal = orientation.rotate(modelNormal).normalize();
 
         // counter-clockwise seen from outside; the diagonals' cross product
@@ -247,7 +284,39 @@ public final class ConsoleMesh {
                 v[i] = v0[(i + start) % 4];
             }
         }
-        target.add(pack(pos, u, v, normal, sprite));
+        if (skinned) {
+            Direction side = skinSide != null ? skinSide : Direction.getNearest(normal.x, normal.y, normal.z);
+            for (Layer layer : skin.layers(side))
+                target.add(pack(pos, atlasU(layer.sprite(), u), atlasV(layer.sprite(), v), normal,
+                        layer.sprite(), layer.tintIndex()));
+            return;
+        }
+        // texture px to atlas uv; connected walls are redirected into the casing's CT sheet
+        boolean connected = ct != null && ctIndex >= 0 && sprite == ct.getOriginal();
+        u = atlasU(sprite, u);
+        v = atlasV(sprite, v);
+        if (connected) {
+            for (int i = 0; i < 4; i++) {
+                u[i] = ct.getTargetU(u[i], ctIndex);
+                v[i] = ct.getTargetV(v[i], ctIndex);
+            }
+            sprite = ct.getTarget();
+        }
+        target.add(pack(pos, u, v, normal, sprite, -1));
+    }
+
+    private static float[] atlasU(TextureAtlasSprite sprite, float[] px) {
+        float[] u = new float[4];
+        for (int i = 0; i < 4; i++)
+            u[i] = ClientCompat.spriteU(sprite, px[i]);
+        return u;
+    }
+
+    private static float[] atlasV(TextureAtlasSprite sprite, float[] px) {
+        float[] v = new float[4];
+        for (int i = 0; i < 4; i++)
+            v[i] = ClientCompat.spriteV(sprite, px[i]);
+        return v;
     }
 
     /**
@@ -309,7 +378,7 @@ public final class ConsoleMesh {
     }
 
     /** BLOCK layout per vertex: position xyz, colour, atlas uv, lightmap, normal — 8 ints. */
-    private static BakedQuad pack(Vec3[] pos, float[] u, float[] v, Vec3 n, TextureAtlasSprite sprite) {
+    private static BakedQuad pack(Vec3[] pos, float[] u, float[] v, Vec3 n, TextureAtlasSprite sprite, int tintIndex) {
         int[] data = new int[32];
         int packedNormal = ((int) Math.round(n.x * 127) & 0xFF)
                 | (((int) Math.round(n.y * 127) & 0xFF) << 8)
@@ -325,6 +394,6 @@ public final class ConsoleMesh {
             data[base + 6] = 0;
             data[base + 7] = packedNormal;
         }
-        return new BakedQuad(data, -1, Direction.getNearest(n.x, n.y, n.z), sprite, true);
+        return new BakedQuad(data, tintIndex, Direction.getNearest(n.x, n.y, n.z), sprite, true);
     }
 }

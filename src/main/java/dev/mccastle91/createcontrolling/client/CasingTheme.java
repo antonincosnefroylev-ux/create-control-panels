@@ -21,7 +21,9 @@ public enum CasingTheme {
     // train casing: dark slate with brass lettering
     RAILWAY(0x8388A0, 0x565A6B, 0x1E1F27, 0xF2CE7A, 0x30323D, 0xE4B763),
     INDUSTRIAL_IRON(0x9A9B9E, 0x6F7072, 0x2A2A2C, 0xF0F0F0, 0x3A3B3D, 0xC9CACC),
-    WEATHERED_IRON(0xB39A82, 0x8A7560, 0x3A2E24, 0x2E2219, 0x43372D, 0xD0B69C);
+    WEATHERED_IRON(0xB39A82, 0x8A7560, 0x3A2E24, 0x2E2219, 0x43372D, 0xD0B69C),
+    // the copycat console: zinc, whatever block it copies
+    COPYCAT(0xD5E3D8, 0xA9BDAF, 0x3F4D45, 0x26312B, 0x4A5650, 0xC6D8CB);
 
     public final int titleHighlight;
     public final int title;
@@ -46,6 +48,7 @@ public enum CasingTheme {
             case RAILWAY: return RAILWAY;
             case INDUSTRIAL_IRON: return INDUSTRIAL_IRON;
             case WEATHERED_IRON: return WEATHERED_IRON;
+            case COPYCAT: return COPYCAT;
             default: return ANDESITE;
         }
     }

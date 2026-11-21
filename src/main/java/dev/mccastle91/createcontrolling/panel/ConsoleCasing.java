@@ -24,18 +24,23 @@ public enum ConsoleCasing {
     INDUSTRIAL_IRON("industrial_iron", "create:industrial_iron_block", "create:block/industrial_iron_block",
             "create:block/industrial_iron_block", 0xFF6F7072),
     WEATHERED_IRON("weathered_iron", "create:weathered_iron_block", "create:block/weathered_iron_block",
-            "create:block/weathered_iron_block", 0xFF7A6957);
+            "create:block/weathered_iron_block", 0xFF7A6957),
+    // the copycat console's own: no item applies it, and its zinc trim stays
+    // whatever block the console copies
+    COPYCAT("copycat", null, "create:block/copycat_base",
+            "create:block/zinc_block", 0xFFB5C7BA);
 
     /** Freshly crafted consoles. */
     public static final ConsoleCasing DEFAULT = ANDESITE;
 
     private final String id;
+    @Nullable
     private final String itemId;
     private final String texture;
     private final String trimTexture;
     private final int frameColor;
 
-    ConsoleCasing(String id, String itemId, String texture, String trimTexture, int frameColor) {
+    ConsoleCasing(String id, @Nullable String itemId, String texture, String trimTexture, int frameColor) {
         this.id = id;
         this.itemId = itemId;
         this.texture = texture;
@@ -47,7 +52,8 @@ public enum ConsoleCasing {
         return id;
     }
 
-    /** Registry id of the Create item that applies this casing. */
+    /** Registry id of the Create item that applies this casing; null if none does. */
+    @Nullable
     public String itemId() {
         return itemId;
     }
@@ -72,6 +78,8 @@ public enum ConsoleCasing {
 
     /** The Create item that applies this casing, if Create provides it. */
     public java.util.Optional<net.minecraft.world.item.Item> item() {
+        if (itemId == null)
+            return java.util.Optional.empty();
         int colon = itemId.indexOf(':');
         return net.minecraft.core.registries.BuiltInRegistries.ITEM.getOptional(
                 dev.mccastle91.createcontrolling.util.McCompat.id(itemId.substring(0, colon), itemId.substring(colon + 1)));
@@ -87,7 +95,7 @@ public enum ConsoleCasing {
     @Nullable
     public static ConsoleCasing byItemId(String itemId) {
         for (ConsoleCasing casing : values())
-            if (casing.itemId.equals(itemId))
+            if (itemId.equals(casing.itemId))
                 return casing;
         return null;
     }

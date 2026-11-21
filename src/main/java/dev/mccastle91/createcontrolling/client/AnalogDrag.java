@@ -1,5 +1,6 @@
 package dev.mccastle91.createcontrolling.client;
 
+import dev.mccastle91.createcontrolling.compat.create.CopycatConsoleBlock;
 import dev.mccastle91.createcontrolling.config.CCConfig;
 import dev.mccastle91.createcontrolling.item.PanelBlueprintItem;
 import dev.mccastle91.createcontrolling.panel.ConsoleCasing;
@@ -70,6 +71,11 @@ public final class AnalogDrag {
             return;
         Aim aim = aimedAnalog(mc);
         if (aim == null)
+            return;
+        // a block held up to a copycat console is applied to it
+        if (mc.hitResult instanceof BlockHitResult hit
+                && mc.level.getBlockState(aim.pos()).getBlock() instanceof CopycatConsoleBlock
+                && CopycatConsoleBlock.acceptedMaterial(mc.level, aim.pos(), mc.player.getMainHandItem(), hit) != null)
             return;
         event.setCanceled(true);
         event.setSwingHand(false);

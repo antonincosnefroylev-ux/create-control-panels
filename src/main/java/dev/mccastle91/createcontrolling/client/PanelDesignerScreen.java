@@ -144,6 +144,8 @@ public class PanelDesignerScreen extends Screen {
     private AngleSlider angleSlider;
     /** Wall consoles only: which edge stands out from the wall. */
     private Button slopeButton;
+    /** On a copycat console: hands the copied block back. Null on any other console. */
+    private Button clearMaterialButton;
     private final List<Button> shapeOnly = new ArrayList<>();
 
     public PanelDesignerScreen(BlockPos panelPos) {
@@ -299,6 +301,14 @@ public class PanelDesignerScreen extends Screen {
         addRenderableWidget(nameBox);
         nameOnly.add(button(Component.translatable("gui.create_controlling.set_name"), b -> sendName(), sideX, y + 16, 58)
                 .tooltip(Component.translatable("gui.create_controlling.set_name.tooltip")));
+        // ...and, on a copycat console, takes the copied block off again
+        clearMaterialButton = null;
+        if (current != null && current.casing() == ConsoleCasing.COPYCAT) {
+            clearMaterialButton = button(Component.translatable("gui.create_controlling.clear_material"),
+                    b -> send(op(PanelEditOps.OP_CLEAR_MATERIAL)), sideX + 60, y + 16, 58)
+                    .tooltip(Component.translatable("gui.create_controlling.clear_material.tooltip"));
+            nameOnly.add(clearMaterialButton);
+        }
     }
 
     /** One limit's row: - and + at its ends, the value drawn between them (see render). */
@@ -991,7 +1001,20 @@ public class PanelDesignerScreen extends Screen {
      */
     private void renderFace(GuiGraphics graphics, PanelBlockEntity panel) {
         frame(graphics, canvasX - 1, canvasY - 1, canvasX + CANVAS + 1, canvasY + CANVAS + 1, 0xFF000000);
-        graphics.blit(canvasX, canvasY, 0, CANVAS, CANVAS, ComponentPainter.sprite(panel.casing().texture()));
+        if (panel.material() == null) {
+            graphics.blit(canvasX, canvasY, 0, CANVAS, CANVAS, ComponentPainter.sprite(panel.casing().texture()));
+        } else {
+            // a copycat console: the top of the block it copies, in the colour that block has in the hand
+            var colors = net.minecraft.client.Minecraft.getInstance().getBlockColors();
+            for (var layer : dev.mccastle91.createcontrolling.client.model.ConsoleBakedModel.layers(
+                    panel.material(), net.minecraft.core.Direction.UP, null)) {
+                int tint = layer.tintIndex() < 0 ? -1 : colors.getColor(panel.material(), null, null, layer.tintIndex());
+                float r = tint == -1 ? 1f : (tint >> 16 & 0xFF) / 255f;
+                float g = tint == -1 ? 1f : (tint >> 8 & 0xFF) / 255f;
+                float b = tint == -1 ? 1f : (tint & 0xFF) / 255f;
+                graphics.blit(canvasX, canvasY, 0, CANVAS, CANVAS, layer.sprite(), r, g, b, 1f);
+            }
+        }
         int inner = (int) (PanelElement.AREA_MIN * SCALE);
         int x0 = canvasX + inner, y0 = canvasY + inner, x1 = canvasX + CANVAS - inner, y1 = canvasY + CANVAS - inner;
         graphics.enableScissor(x0, y0, x1, y1);
@@ -1110,6 +1133,8 @@ public class PanelDesignerScreen extends Screen {
         if (labelTextBox != null)
             labelTextBox.visible = isLabel;
         nameOnly.forEach(w -> w.visible = element == null);
+        if (clearMaterialButton != null)
+            clearMaterialButton.active = panel != null && panel.material() != null;
         if (nameBox != null)
             nameBox.visible = element == null;
         if (wrapButton != null && element instanceof LabelElement label) {

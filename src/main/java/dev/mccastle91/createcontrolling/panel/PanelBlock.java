@@ -64,6 +64,15 @@ public class PanelBlock extends FaceAttachedHorizontalDirectionalBlock implement
                 .setValue(DIAG_SE, false).setValue(DIAG_SW, false));
     }
 
+    /**
+     * The casing every console of this block wears, or null where the player
+     * chooses it by right-clicking with a Create casing.
+     */
+    @org.jetbrains.annotations.Nullable
+    public ConsoleCasing fixedCasing() {
+        return null;
+    }
+
     /** The registered block entity type for consoles; set by registration. */
     protected BlockEntityType<? extends PanelBlockEntity> blockEntityType() {
         return CCTypes.PANEL_BLOCK_ENTITY.get();
@@ -156,7 +165,7 @@ public class PanelBlock extends FaceAttachedHorizontalDirectionalBlock implement
 
     /**
      * Whether the console one step along model x/z joins this one: same
-     * placement, shape and casing. Sloped consoles only join side by side —
+     * placement, shape, casing and copied block. Sloped consoles only join side by side —
      * front-to-back neighbours make a sawtooth, not one surface.
      */
     private boolean joins(BlockState state, ConsoleOrientation orientation, BlockGetter level, BlockPos pos, int mx, int mz) {
@@ -169,7 +178,8 @@ public class PanelBlock extends FaceAttachedHorizontalDirectionalBlock implement
         ConsoleShape shape = shapeAt(level, pos, state);
         if (mz != 0 && !shape.isFlat())
             return false;
-        return shape.equals(shapeAt(level, other, neighbor)) && casingAt(level, pos) == casingAt(level, other);
+        return shape.equals(shapeAt(level, other, neighbor)) && casingAt(level, pos) == casingAt(level, other)
+                && materialAt(level, pos) == materialAt(level, other);
     }
 
     private static final BooleanProperty[] EDGES = { CONNECT_N, CONNECT_S, CONNECT_W, CONNECT_E };
@@ -217,6 +227,11 @@ public class PanelBlock extends FaceAttachedHorizontalDirectionalBlock implement
         return level.getBlockEntity(pos) instanceof PanelBlockEntity panel ? panel.casing() : ConsoleCasing.DEFAULT;
     }
 
+    @org.jetbrains.annotations.Nullable
+    private static BlockState materialAt(BlockGetter level, BlockPos pos) {
+        return level.getBlockEntity(pos) instanceof PanelBlockEntity panel ? panel.material() : null;
+    }
+
     // --- Wrench and casing --------------------------------------------------
 
     /**
@@ -232,8 +247,11 @@ public class PanelBlock extends FaceAttachedHorizontalDirectionalBlock implement
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
 
-    /** Right-click with a Create casing re-dresses the console; the old casing comes back. */
-    private boolean applyCasing(ItemStack stack, Level level, BlockPos pos, Player player) {
+    /**
+     * Right-click with a Create casing re-dresses the console; the old casing
+     * comes back. Returns true if the item was one that dresses this console.
+     */
+    protected boolean applyCasing(ItemStack stack, Level level, BlockPos pos, Player player, BlockHitResult hit) {
         ConsoleCasing casing = ConsoleCasing.byItemId(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
         if (casing == null || !(level.getBlockEntity(pos) instanceof PanelBlockEntity panel))
             return false;
@@ -296,7 +314,7 @@ public class PanelBlock extends FaceAttachedHorizontalDirectionalBlock implement
     @Override
     protected net.minecraft.world.ItemInteractionResult useItemOn(ItemStack stack, BlockState state,
             Level level, BlockPos pos, Player player, net.minecraft.world.InteractionHand hand, BlockHitResult hitResult) {
-        if (useSpecialItem(stack, level, pos, player))
+        if (useSpecialItem(stack, level, pos, player, hitResult))
             return net.minecraft.world.ItemInteractionResult.sidedSuccess(level.isClientSide);
         return super.useItemOn(stack, state, level, pos, player, hand, hitResult);
     }
@@ -309,19 +327,19 @@ public class PanelBlock extends FaceAttachedHorizontalDirectionalBlock implement
     /*@Override
     public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player,
             net.minecraft.world.InteractionHand hand, BlockHitResult hitResult) {
-        if (useSpecialItem(player.getItemInHand(hand), level, pos, player))
+        if (useSpecialItem(player.getItemInHand(hand), level, pos, player, hitResult))
             return InteractionResult.sidedSuccess(level.isClientSide);
         return interact(state, level, pos, player, hitResult);
     }
     *///?}
 
     /** Items that act on the console itself rather than on a component. */
-    private boolean useSpecialItem(ItemStack stack, Level level, BlockPos pos, Player player) {
+    private boolean useSpecialItem(ItemStack stack, Level level, BlockPos pos, Player player, BlockHitResult hit) {
         if (stack.getItem() instanceof PanelBlueprintItem) {
             PanelBlueprintItem.useOnPanel(stack, level, pos, player);
             return true;
         }
-        return applyCasing(stack, level, pos, player);
+        return applyCasing(stack, level, pos, player, hit);
     }
 
     private InteractionResult interact(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
