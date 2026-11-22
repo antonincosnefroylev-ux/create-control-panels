@@ -119,7 +119,7 @@ public final class CreateControllingClient {
     /** Sneak + scroll while aiming at a knob or slider nudges it, analog-lever style. */
     private static void onMouseScroll(InputEvent.MouseScrollingEvent event) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || mc.screen != null || !mc.player.isShiftKeyDown())
+        if (mc.player == null || mc.screen != null || !mc.player.isShiftKeyDown() || AnalogDrag.holdsCableTool(mc.player))
             return;
         AnalogDrag.Aim aim = AnalogDrag.aimedAnalog(mc);
         if (aim == null)

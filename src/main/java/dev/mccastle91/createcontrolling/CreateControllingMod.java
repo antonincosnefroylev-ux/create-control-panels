@@ -3,6 +3,9 @@ package dev.mccastle91.createcontrolling;
 import dev.mccastle91.createcontrolling.client.CreateControllingClient;
 import dev.mccastle91.createcontrolling.compat.computercraft.ComputerCraftCompat;
 import dev.mccastle91.createcontrolling.compat.create.ClipboardFrequencies;
+//? if neoforge {
+import dev.mccastle91.createcontrolling.compat.drivebysable.DriveBySableCompat;
+//?}
 import dev.mccastle91.createcontrolling.compat.create.CreateLinkPlatform;
 import dev.mccastle91.createcontrolling.config.CCClientConfigSpec;
 import dev.mccastle91.createcontrolling.config.CCConfigSpec;
@@ -63,6 +66,11 @@ public class CreateControllingMod {
         // Optional: the class below is only ever loaded with CC: Tweaked present
         if (ModList.get().isLoaded("computercraft"))
             ComputerCraftCompat.init(modEventBus);
+        //? if neoforge {
+        // Optional: likewise only loaded with Drive-By-Sable present
+        if (ModList.get().isLoaded(DriveBySableCompat.MOD_ID))
+            DriveBySableCompat.init();
+        //?}
         // Game tests are discovered via @GameTestHolder annotation scanning
     }
 

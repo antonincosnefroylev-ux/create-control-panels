@@ -31,6 +31,7 @@ v1 (phases 1–8 below) was the flat-panel version. **v2** redesigns it towards 
 | Ponder / Flywheel / Registrate | 1.0.91 / 1.0.5 / MC1.20-1.3.3 | 1.0.82 / 1.0.6 / MC1.21-1.3.0+67 |
 | JEI (optional) | 15.x (built against 15.74.0.234) | 19.x (built against 19.70.0.469) |
 | CC: Tweaked (optional) | built against 1.121.0 | built against 1.121.0 |
+| Drive-By-Sable (optional) | not available | built against r2.1.0 |
 | Java | 17 | 21 |
 
 6.0.8 is the newest Create release published for both Minecraft versions, so it's the shared minimum. The companion versions match what each Create release bundles. All versions live in [stonecutter.properties.toml](stonecutter.properties.toml).
@@ -44,6 +45,7 @@ Gradle needs a JDK 17+ to run (`JAVA_HOME`); the per-version JDKs (17 and 21) ar
 ./gradlew :1.21.1-neoforge:runClient     # dev client, 1.21.1
 ./gradlew :1.20.1-forge:runClient        # dev client, 1.20.1
 ./gradlew :1.21.1-neoforge:runGametest   # in-world integration tests (also :1.20.1-forge:)
+./gradlew :1.21.1-neoforge:runGametest -Pcables   # the same with Drive-By-Sable, Sable and Create Aeronautics loaded (also runClient)
 ```
 
 Jars land in `versions/<version>/build/libs/`. The 1.20.1 jar there is the reobfuscated one to ship; dev runs keep their worlds under `run/<version>/`.
@@ -63,6 +65,7 @@ Jars land in `versions/<version>/build/libs/`. The 1.20.1 jar there is the reobf
 - **Wrench** a console to step through the 0/15/30/45° angles; **sneak-wrench** it to pick it up into your inventory, design included. Floor and ceiling consoles slope one way, towards you; wall consoles start flat and can tilt either way — the wrench runs through the angles with the top edge standing out, then with the bottom edge out (in the designer, the *Top out / Bottom out* button swaps them). **Right-click with a Create casing** (Andesite, Brass, Copper or Train Casing, or a Block of Industrial Iron or Weathered Iron) to re-dress it. The metal trim of the parts on it follows the casing: andesite, brass, copper, brass again on Train Casing, and industrial or weathered iron.
 - **Show live text** with a Display Link: mount a **Nixie Strip** (2–5 tubes, one line) or a **Display Board** (always two rows, each with its own line), and set which line each uses in the designer. Right-click the console with a Display Link, place the link on any Create display source, then open the link and pick that line. Anything a Display Link can read works, including sources from other mods. Tubes show one character each: numbers lose decimals, then their unit, to fit, and show dashes if they still can't. Long board text shrinks, then is cut off.
 - **Wire it to a computer** (optional, needs [CC: Tweaked](https://tweaked.cc/)): see [Computers](#computers-cc-tweaked) below.
+- **Wire it with cables** (optional, needs [Drive-By-Sable](https://modrinth.com/mod/drive-by-sable), 1.21.1 only): see [Cables](#cables-drive-by-sable) below.
 - **Labels** never draw past their own width. Turn on **Wrap** in the designer to let one run onto up to three lines; the text box stops taking characters once the label is full. **Bar meters** come as two parts, like sliders: a horizontal one filling left to right and a vertical one filling from the bottom.
 - Breaking a console keeps its design; a **Console Blueprint** copies a design onto other consoles, charging only for parts the target lacks.
 
@@ -105,6 +108,19 @@ end
 ```
 
 Editing a console in the designer can renumber its components; call `getComponents()` again after changing a design. If a computer touches two consoles of the same group (or several are on its modems), each one is its own peripheral and each reports the group's events.
+
+## Cables (Drive-By-Sable)
+
+With [Drive-By-Sable](https://modrinth.com/mod/drive-by-sable) installed (NeoForge 1.21.1; it needs Sable), every control, lamp, meter and nixie readout on a console is a cable endpoint of its own. No frequency is needed.
+
+- Hold Drive-By-Sable's **Cable**, aim at a **control** (button, switch, knob, slider, lever) and use it to pick it as the source, then use the block face, or the lamp or meter on any console, that it should drive. The cable carries whatever the control sends, 0–15.
+- A **lamp, meter or nixie readout** takes a cable the same way, from a console control or from anything else Drive-By-Sable can use as a source (a lever, a sensor, a controller hub).
+- A part that also has a frequency keeps using it: a control sends on both, and a lamp or meter shows whichever is stronger, the cable or the frequency.
+- While you hold the Cable or the Cable Cutter, clicking a part only wires it: knobs, sliders and the rest don't move, and you don't need to sneak.
+- The cable has to be aimed at a part; the bare face of a console takes none. Each part shows as its own channel, named after the part with a short code, such as `Knob 3FA2`. The code stays with the part however the console is edited.
+- Removing a part in the designer drops its cables (the cable items are not returned). Breaking the console is handled by Drive-By-Sable like any other block.
+
+This is built against Drive-By-Sable r2.1.0. It uses that mod's internal classes, since it publishes no API, so a later Drive-By-Sable update may need a matching update here. The original Drive-By-Wire and its own Sable port are not supported.
 
 ## Layout
 

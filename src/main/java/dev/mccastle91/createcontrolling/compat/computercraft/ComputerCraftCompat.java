@@ -39,6 +39,6 @@ public final class ComputerCraftCompat {
 
     /** One peripheral per console, so computers on several sides share its state. */
     private static IPeripheral peripheral(PanelBlockEntity console) {
-        return console.integrationData(ConsolePeripheral::new);
+        return console.integrationData(ConsolePeripheral.class, ConsolePeripheral::new);
     }
 }

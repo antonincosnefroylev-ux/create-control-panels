@@ -36,6 +36,12 @@ public final class AnalogDrag {
     /** Items whose right-click on a console means something else. */
     private static final Set<String> TOOLS = Set.of("create:wrench", "create:clipboard", "create:display_link");
 
+    /**
+     * Drive-By-Sable's Cable and Cable Cutter: with one in hand a click on a
+     * part wires it (see compat/drivebysable), so the console leaves the part alone.
+     */
+    private static final Set<String> CABLE_TOOLS = Set.of("drivebysable:cable", "drivebysable:cable_cutter");
+
     /** The knob or slider under the crosshair, and the console it is on. */
     public record Aim(BlockPos pos, AnalogElement element) {
     }
@@ -67,7 +73,7 @@ public final class AnalogDrag {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.screen != null || mc.player.isShiftKeyDown() || mc.player.isSpectator())
             return;
-        if (usesConsoleItself(mc.player.getMainHandItem()))
+        if (usesConsoleItself(mc.player.getMainHandItem()) || holdsCableTool(mc.player))
             return;
         Aim aim = aimedAnalog(mc);
         if (aim == null)
@@ -80,6 +86,12 @@ public final class AnalogDrag {
         event.setCanceled(true);
         event.setSwingHand(false);
         mc.setScreen(new AnalogDragScreen(aim.pos(), aim.element(), CCConfig.analogPopup));
+    }
+
+    /** Whether the player is wiring with Drive-By-Sable's tools: clicks and scrolls then belong to the cable. */
+    public static boolean holdsCableTool(net.minecraft.world.entity.player.Player player) {
+        ItemStack stack = player.getMainHandItem();
+        return !stack.isEmpty() && CABLE_TOOLS.contains(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
     }
 
     /** Blueprints, casings and Create's tools act on the console, not on the part under them. */

@@ -5,12 +5,14 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.util.Mth;
 
 /**
- * Displays its frequency's current strength. The strength is runtime state:
- * never saved, resynced from the link network on load.
+ * Displays its frequency's current strength, or the signal on a cable wired
+ * to it (another mod's wiring, see compat/drivebysable) if that is stronger.
+ * Both are runtime state: never saved, resent by their networks on load.
  */
 public abstract class ReceiverElement extends PanelElement {
 
     private int receivedStrength;
+    private int wiredStrength;
 
     protected ReceiverElement(PanelElementType<?> type) {
         super(type);
@@ -26,8 +28,9 @@ public abstract class ReceiverElement extends PanelElement {
         return true;
     }
 
+    /** What the part shows: the stronger of its frequency's signal and a wired one. */
     public int receivedStrength() {
-        return receivedStrength;
+        return Math.max(receivedStrength, wiredStrength);
     }
 
     public void setReceivedStrength(int strength) {
@@ -36,14 +39,21 @@ public abstract class ReceiverElement extends PanelElement {
 
     @Override
     public boolean receiveStrength(int strength) {
-        int previous = receivedStrength;
+        int previous = receivedStrength();
         setReceivedStrength(strength);
-        return previous != receivedStrength;
+        return previous != receivedStrength();
+    }
+
+    @Override
+    public boolean receiveWired(int strength) {
+        int previous = receivedStrength();
+        wiredStrength = Mth.clamp(strength, 0, 15);
+        return previous != receivedStrength();
     }
 
     @Override
     public int displayStrength() {
-        return receivedStrength;
+        return receivedStrength();
     }
 
     @Override

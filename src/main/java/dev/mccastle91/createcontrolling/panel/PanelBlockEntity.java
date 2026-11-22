@@ -327,6 +327,8 @@ public class PanelBlockEntity extends BlockEntity {
         }
         if (anyReset)
             syncToClients();
+        for (LayoutListener listener : layoutListeners)
+            listener.layoutReady(this);
     }
 
     private void onStrengthReceived(PanelElement element, int strength) {
@@ -410,7 +412,17 @@ public class PanelBlockEntity extends BlockEntity {
         void signalChanged(PanelBlockEntity console, PanelElement element, int strength);
     }
 
+    /**
+     * Told when a console's components are (re)connected: on load and after
+     * every change to its layout; server only. For integrations that keep
+     * their own record of a console's parts (see compat/drivebysable).
+     */
+    public interface LayoutListener {
+        void layoutReady(PanelBlockEntity console);
+    }
+
     private static final List<SignalListener> signalListeners = new CopyOnWriteArrayList<>();
+    private static final List<LayoutListener> layoutListeners = new CopyOnWriteArrayList<>();
     private final Map<UUID, Integer> lastSignals = new HashMap<>();
 
     /** What a computer sends on receiver components' frequencies. Never saved: it ends with the program. */
@@ -428,6 +440,10 @@ public class PanelBlockEntity extends BlockEntity {
 
     public static void removeSignalListener(SignalListener listener) {
         signalListeners.remove(listener);
+    }
+
+    public static void addLayoutListener(LayoutListener listener) {
+        layoutListeners.add(listener);
     }
 
     private void signalMayHaveChanged(PanelElement element) {
@@ -484,6 +500,24 @@ public class PanelBlockEntity extends BlockEntity {
     }
 
     /**
+     * The signal of a cable wired to a lamp, meter or other receiver (another
+     * mod's wiring, see compat/drivebysable); 0 when the cable is dead or gone.
+     * The part shows the stronger of this and what its frequency or a computer
+     * gives it. Never saved: the wiring mod resends it on load.
+     * Returns false if there is no such receiver.
+     */
+    public boolean setWiredSignal(UUID elementId, int strength) {
+        PanelElement element = layout.elementById(elementId).orElse(null);
+        if (element == null || !element.isReceiver() || level == null || level.isClientSide)
+            return false;
+        if (element.receiveWired(strength)) {
+            syncToClients();
+            signalMayHaveChanged(element);
+        }
+        return true;
+    }
+
+    /**
      * Ends everything {@link #setSignal} did to receivers: stops sending on
      * their frequencies and darkens the unlinked ones, which only a computer drives.
      */
@@ -518,14 +552,11 @@ public class PanelBlockEntity extends BlockEntity {
                 () -> drivenStrengths.getOrDefault(id, 0), strength -> { }, () -> !isRemoved()));
     }
 
-    /** One slot for an optional integration's per-console object (see compat/computercraft). */
-    private Object integrationData;
+    /** Optional integrations' per-console objects, one of each kind (see compat/computercraft). */
+    private final Map<Class<?>, Object> integrationData = new HashMap<>();
 
-    @SuppressWarnings("unchecked")
-    public <T> T integrationData(java.util.function.Function<PanelBlockEntity, T> factory) {
-        if (integrationData == null)
-            integrationData = factory.apply(this);
-        return (T) integrationData;
+    public <T> T integrationData(Class<T> kind, java.util.function.Function<PanelBlockEntity, T> factory) {
+        return kind.cast(integrationData.computeIfAbsent(kind, ignored -> factory.apply(this)));
     }
 
     /** Lets elements run timers (button pulses); registered by PanelBlock server-side only. */

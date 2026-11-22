@@ -269,6 +269,14 @@ public abstract class PanelElement {
         return false;
     }
 
+    /**
+     * Pushes the signal of a cable wired to a receiver (another mod's wiring);
+     * it shows whichever is stronger, that or its frequency's. True if what it shows changed.
+     */
+    public boolean receiveWired(int strength) {
+        return false;
+    }
+
     /** Transient visual state synced to clients (pulse glow, received strength). */
     public int displayStrength() {
         return transmittedStrength();

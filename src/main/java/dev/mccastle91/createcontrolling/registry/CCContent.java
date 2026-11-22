@@ -10,10 +10,14 @@ import dev.mccastle91.createcontrolling.CreateControlling;
 import dev.mccastle91.createcontrolling.compat.create.ConsoleDisplayTarget;
 import dev.mccastle91.createcontrolling.compat.create.CopycatConsoleBlock;
 import dev.mccastle91.createcontrolling.compat.create.WrenchablePanelBlock;
+//? if neoforge {
+import dev.mccastle91.createcontrolling.compat.drivebysable.DriveBySableCompat;
+//?}
 import dev.mccastle91.createcontrolling.item.PanelBlueprintItem;
 import dev.mccastle91.createcontrolling.panel.CCTypes;
 import dev.mccastle91.createcontrolling.panel.CreatePanelBlockEntity;
 import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
 
 import java.util.function.Supplier;
@@ -29,8 +33,27 @@ public final class CCContent {
         }).register();
     }
 
+    // With Drive-By-Sable installed the consoles are built as its cable
+    // endpoints (see compat/drivebysable); its classes load in no other case
+
+    private static WrenchablePanelBlock consoleBlock(BlockBehaviour.Properties properties) {
+        //? if neoforge {
+        if (net.neoforged.fml.ModList.get().isLoaded(DriveBySableCompat.MOD_ID))
+            return DriveBySableCompat.consoleBlock(properties);
+        //?}
+        return new WrenchablePanelBlock(properties);
+    }
+
+    private static CopycatConsoleBlock copycatConsoleBlock(BlockBehaviour.Properties properties) {
+        //? if neoforge {
+        if (net.neoforged.fml.ModList.get().isLoaded(DriveBySableCompat.MOD_ID))
+            return DriveBySableCompat.copycatConsoleBlock(properties);
+        //?}
+        return new CopycatConsoleBlock(properties);
+    }
+
     public static final BlockEntry<WrenchablePanelBlock> CONTROL_PANEL = REGISTRATE
-            .block("control_panel", WrenchablePanelBlock::new)
+            .block("control_panel", CCContent::consoleBlock)
             .properties(p -> p.mapColor(MapColor.STONE)
                     .strength(1.5f)
                     .sound(SoundType.NETHERITE_BLOCK)
@@ -40,7 +63,7 @@ public final class CCContent {
 
     /** A console that takes the look of a block applied to it; everything else is the same console. */
     public static final BlockEntry<CopycatConsoleBlock> COPYCAT_CONTROL_PANEL = REGISTRATE
-            .block("copycat_control_panel", CopycatConsoleBlock::new)
+            .block("copycat_control_panel", CCContent::copycatConsoleBlock)
             .properties(p -> p.mapColor(MapColor.GLOW_LICHEN)
                     .strength(1.5f)
                     .sound(SoundType.NETHERITE_BLOCK)
