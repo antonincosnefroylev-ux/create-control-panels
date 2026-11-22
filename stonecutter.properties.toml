@@ -41,3 +41,5 @@ deps.cct = "1.121.0"
 deps.drivebysable = "r2.1.0"
 # The Sable it runs on; only on the dev runtime with -Pcables
 deps.sable = "2.0.6"
+# Create Aeronautics (bundles Simulated, which Drive-By-Sable's client needs); -Pcables only
+deps.aeronautics = "1.3.3+mc1.21.1"

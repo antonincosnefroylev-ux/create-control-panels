@@ -45,7 +45,7 @@ Gradle needs a JDK 17+ to run (`JAVA_HOME`); the per-version JDKs (17 and 21) ar
 ./gradlew :1.21.1-neoforge:runClient     # dev client, 1.21.1
 ./gradlew :1.20.1-forge:runClient        # dev client, 1.20.1
 ./gradlew :1.21.1-neoforge:runGametest   # in-world integration tests (also :1.20.1-forge:)
-./gradlew :1.21.1-neoforge:runGametest -Pcables   # the same with Drive-By-Sable and Sable loaded (also runClient)
+./gradlew :1.21.1-neoforge:runGametest -Pcables   # the same with Drive-By-Sable, Sable and Create Aeronautics loaded (also runClient)
 ```
 
 Jars land in `versions/<version>/build/libs/`. The 1.20.1 jar there is the reobfuscated one to ship; dev runs keep their worlds under `run/<version>/`.

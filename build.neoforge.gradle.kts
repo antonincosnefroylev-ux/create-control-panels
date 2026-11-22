@@ -77,6 +77,8 @@ dependencies {
     if (providers.gradleProperty("cables").isPresent) {
         runtimeOnly("maven.modrinth:drive-by-sable:${property("deps.drivebysable")}") { isTransitive = false }
         runtimeOnly("dev.ryanhcode.sable:sable-neoforge-$mcVersion:${property("deps.sable")}") { isTransitive = false }
+        // Drive-By-Sable's client (its Ponder scenes) needs Simulated, which ships inside Aeronautics
+        runtimeOnly("maven.modrinth:create-aeronautics:${property("deps.aeronautics")}") { isTransitive = false }
     }
 
     testImplementation(platform("org.junit:junit-bom:5.10.2"))
