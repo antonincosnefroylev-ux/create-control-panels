@@ -50,3 +50,11 @@ type = "optional"
 versionRange = "[1.110,)"
 ordering = "NONE"
 side = "BOTH"
+
+# Optional: console parts are cable endpoints
+[[dependencies.create_controlling]]
+modId = "drivebysable"
+type = "optional"
+versionRange = "[2.1.0,)"
+ordering = "NONE"
+side = "BOTH"

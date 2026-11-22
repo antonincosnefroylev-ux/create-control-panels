@@ -33,6 +33,14 @@ repositories {
         name = "CC: Tweaked"
         content { includeGroup("cc.tweaked") }
     }
+    exclusiveContent {
+        forRepository { maven("https://api.modrinth.com/maven") { name = "Modrinth" } }
+        filter { includeGroup("maven.modrinth") }
+    }
+    maven("https://maven.ryanhcode.dev/releases") {
+        name = "Sable"
+        content { includeGroup("dev.ryanhcode.sable") }
+    }
 }
 
 dependencies {
@@ -61,6 +69,15 @@ dependencies {
     compileOnly("cc.tweaked:cc-tweaked-$mcVersion-forge-api:${property("deps.cct")}") { isTransitive = false }
     compileOnly("cc.tweaked:cc-tweaked-$mcVersion-core-api:${property("deps.cct")}") { isTransitive = false }
     runtimeOnly("cc.tweaked:cc-tweaked-$mcVersion-forge:${property("deps.cct")}") { isTransitive = false }
+
+    // Drive-By-Sable is optional: compile against the mod itself (it publishes no API jar)
+    compileOnly("maven.modrinth:drive-by-sable:${property("deps.drivebysable")}") { isTransitive = false }
+    // It needs Sable, a physics engine, so neither joins the dev runtime unless
+    // asked for: add -Pcables to runClient or runGametest (see CableGameTests)
+    if (providers.gradleProperty("cables").isPresent) {
+        runtimeOnly("maven.modrinth:drive-by-sable:${property("deps.drivebysable")}") { isTransitive = false }
+        runtimeOnly("dev.ryanhcode.sable:sable-neoforge-$mcVersion:${property("deps.sable")}") { isTransitive = false }
+    }
 
     testImplementation(platform("org.junit:junit-bom:5.10.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")
