@@ -116,6 +116,7 @@ With [Drive-By-Sable](https://modrinth.com/mod/drive-by-sable) installed (NeoFor
 - Hold Drive-By-Sable's **Cable**, aim at a **control** (button, switch, knob, slider, lever) and use it to pick it as the source, then use the block face, or the lamp or meter on any console, that it should drive. The cable carries whatever the control sends, 0–15.
 - A **lamp, meter or nixie readout** takes a cable the same way, from a console control or from anything else Drive-By-Sable can use as a source (a lever, a sensor, a controller hub).
 - A part that also has a frequency keeps using it: a control sends on both, and a lamp or meter shows whichever is stronger, the cable or the frequency.
+- While you hold the Cable or the Cable Cutter, clicking a part only wires it: knobs, sliders and the rest don't move, and you don't need to sneak.
 - The cable has to be aimed at a part; the bare face of a console takes none. Each part shows as its own channel, named after the part with a short code, such as `Knob 3FA2`. The code stays with the part however the console is edited.
 - Removing a part in the designer drops its cables (the cable items are not returned). Breaking the console is handled by Drive-By-Sable like any other block.
 
