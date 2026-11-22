@@ -1,0 +1,22 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " AA",
+    " BA",
+    "B  "
+    ],
+  "key": {
+    "A": {"item": "minecraft:iron_ingot"},
+    "B": {"item": "minecraft:iron_nugget"}
+  },
+  "result": {
+    "id": "create_controlling:key",
+    "count": 3,
+    "components": {
+      "minecraft:custom_data": {
+        "color": "black"
+      }
+    }
+  }
+}
